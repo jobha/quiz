@@ -227,7 +227,7 @@ function SortableHeader({
             disabled={disabled}
             onClick={() => setEditing(true)}
             aria-label="Endre rundenavn"
-            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition text-xs text-zinc-400 hover:accent-text disabled:opacity-30"
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 delay-100 group-hover:delay-0 text-xs text-zinc-400 hover:accent-text disabled:opacity-30"
           >
             ✎
           </button>
@@ -236,7 +236,7 @@ function SortableHeader({
             disabled={disabled}
             onClick={onDelete}
             aria-label="Slett runde"
-            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition text-xs text-zinc-400 hover:text-red-500 disabled:opacity-30"
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 delay-100 group-hover:delay-0 text-xs text-zinc-400 hover:text-red-500 disabled:opacity-30"
           >
             ✗
           </button>
@@ -354,13 +354,13 @@ function InsertSeparator({
     <div
       ref={setNodeRef}
       className={[
-        "group relative flex items-center justify-center transition-all",
+        "group relative flex items-center justify-center",
         isOver ? "h-[18px] my-0.5" : "h-1.5 hover:h-[18px]",
       ].join(" ")}
     >
       <div
         className={[
-          "absolute left-0 right-0 transition-all pointer-events-none",
+          "absolute left-0 right-0 pointer-events-none",
           isOver
             ? "h-px border-t border-dashed accent-border"
             : "h-px border-t border-dashed border-transparent group-hover:accent-border",
@@ -370,7 +370,7 @@ function InsertSeparator({
         type="button"
         disabled={disabled}
         onClick={() => setEditing(true)}
-        className="relative z-10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition text-[10px] uppercase tracking-widest accent-text bg-[var(--bg,transparent)] px-2 py-0.5 rounded disabled:opacity-30"
+        className="relative z-10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity duration-150 delay-100 group-hover:delay-0 text-[10px] uppercase tracking-widest accent-text bg-[var(--bg,transparent)] px-2 py-0.5 rounded disabled:opacity-30"
       >
         + Sett inn runde
       </button>

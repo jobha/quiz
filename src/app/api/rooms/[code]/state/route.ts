@@ -26,6 +26,7 @@ export async function POST(
     accent_color?: string | null;
     host_avatar_emoji?: string | null;
     host_avatar_color?: string | null;
+    summary_round_name?: string | null;
   } | null;
 
   const update: Record<string, unknown> = {};
@@ -79,6 +80,15 @@ export async function POST(
       update.host_avatar_color = c.toLowerCase();
     } else {
       return new NextResponse("Ugyldig farge", { status: 400 });
+    }
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, "summary_round_name")) {
+    const r = body.summary_round_name;
+    if (r === null) update.summary_round_name = null;
+    else if (typeof r === "string") {
+      update.summary_round_name = r.trim().slice(0, 80);
+    } else {
+      return new NextResponse("Ugyldig runde", { status: 400 });
     }
   }
   if (Object.keys(update).length === 0) {

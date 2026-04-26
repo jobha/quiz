@@ -10,6 +10,7 @@ import { Confetti } from "@/components/Confetti";
 import { AudioClue } from "@/components/AudioClue";
 import { Avatar } from "@/components/Avatar";
 import { Podium } from "@/components/Podium";
+import { RoundSummaryOverlay } from "@/components/RoundSummaryOverlay";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
 import { useRoomReactions } from "@/lib/reactions";
@@ -83,7 +84,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       const { data: roomData } = await sb
         .from("rooms")
         .select(
-          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, created_at",
+          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, summary_round_name, created_at",
         )
         .eq("code", code)
         .maybeSingle();
@@ -142,7 +143,12 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   // For the player-facing scoreboard: load all answers + bonus and stay
   // in sync. Cheap because the room is small.
   useEffect(() => {
-    if (!room?.show_scoreboard && !room?.show_own_score && room?.phase !== "ended") {
+    if (
+      !room?.show_scoreboard &&
+      !room?.show_own_score &&
+      room?.phase !== "ended" &&
+      !room?.summary_round_name
+    ) {
       setAllAnswers([]);
       setBonusByPlayer({});
       return;
@@ -214,11 +220,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       cancelled = true;
       sb.removeChannel(channel);
     };
-  }, [code, room?.show_scoreboard, room?.show_own_score, room?.phase]);
+  }, [code, room?.show_scoreboard, room?.show_own_score, room?.phase, room?.summary_round_name]);
 
   // Load all questions for history view, when enabled.
   useEffect(() => {
-    if (!room?.show_history) {
+    if (!room?.show_history && !room?.summary_round_name) {
       setAllQuestions([]);
       return;
     }
@@ -267,7 +273,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       cancelled = true;
       sb.removeChannel(channel);
     };
-  }, [code, room?.show_history]);
+  }, [code, room?.show_history, room?.summary_round_name]);
 
   // Load current question and subscribe to its updates (so reveal /
   // unreveal toggled by the host propagate without a refresh).
@@ -551,6 +557,18 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
               avatar_color: room.host_avatar_color,
             } as Player,
           ]}
+        />
+      )}
+      {!previewMode && room.summary_round_name !== null && (
+        <RoundSummaryOverlay
+          roundName={room.summary_round_name}
+          questions={allQuestions.filter(
+            (q) =>
+              (q.round_name?.trim() || "") ===
+              (room.summary_round_name?.trim() || ""),
+          )}
+          answers={allAnswers}
+          players={players}
         />
       )}
       {!previewMode && spotlightAnswer && spotlightPlayer && (

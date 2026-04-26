@@ -13,10 +13,12 @@ import type {
 } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SortableQuestionList } from "@/components/SortableQuestionList";
+import { QuestionListWithRounds } from "@/components/QuestionListWithRounds";
 import { Avatar } from "@/components/Avatar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { Podium } from "@/components/Podium";
+import { RoundSummaryOverlay } from "@/components/RoundSummaryOverlay";
 import { useRoomReactions } from "@/lib/reactions";
 import { useTypingListeners } from "@/lib/typing-presence";
 
@@ -74,7 +76,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         sb
           .from("rooms")
           .select(
-            "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, created_at",
+            "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, summary_round_name, created_at",
           )
           .eq("code", code)
           .maybeSingle(),
@@ -319,6 +321,24 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           } as Player,
         ]}
       />
+      {room.summary_round_name !== null && (
+        <RoundSummaryOverlay
+          roundName={room.summary_round_name}
+          questions={questions.filter(
+            (q) =>
+              (q.round_name?.trim() || "") ===
+              (room.summary_round_name?.trim() || ""),
+          )}
+          answers={answers}
+          players={players}
+          isHost
+          onClose={() =>
+            call(`/api/rooms/${code}/state`, {
+              summary_round_name: null,
+            })
+          }
+        />
+      )}
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-3">
@@ -800,6 +820,32 @@ function CurrentQuestionPanel({
                 Avslutt quiz
               </button>
             )}
+            {(() => {
+              if (!question || !isRevealed) return null;
+              const currentRound = question.round_name?.trim() ?? "";
+              const inRound = questions.filter(
+                (q) => (q.round_name?.trim() ?? "") === currentRound,
+              );
+              const allRevealed =
+                inRound.length > 0 && inRound.every((q) => q.revealed);
+              if (!allRevealed) return null;
+              return (
+                <button
+                  onClick={() =>
+                    run("summary", () =>
+                      call(`/api/rooms/${room.code}/state`, {
+                        summary_round_name: question.round_name ?? "",
+                      }),
+                    )
+                  }
+                  disabled={busy !== null}
+                  className="rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium"
+                  title="Vis full-skjerm oppsummering av runden til alle spillerne"
+                >
+                  🎬 Vis runde-oppsummering
+                </button>
+              );
+            })()}
           </div>
         </>
       ) : (
@@ -1027,39 +1073,27 @@ function QuestionListPanel({
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Group questions by round_name (treating null/empty as "Uten runde").
-  // Each group keeps its questions in their existing position order. The
-  // group order is determined by the first appearance of each round in
-  // the position-sorted list.
-  const groupedQuestions = useMemo(() => {
-    const order: string[] = [];
-    const groups: Record<string, Question[]> = {};
-    for (const q of questions) {
-      const key = q.round_name?.trim() || "";
-      if (!(key in groups)) {
-        groups[key] = [];
-        order.push(key);
-      }
-      groups[key].push(q);
-    }
-    return order.map((key) => ({ name: key, items: groups[key] }));
-  }, [questions]);
-
-  async function persistGroupOrder(roundName: string, orderedIdsInGroup: string[]) {
-    // Compose a global order: walk groups; for the affected round, swap
-    // in the new ordering; everything else stays in current order.
-    const fullOrder: string[] = [];
-    for (const g of groupedQuestions) {
-      if (g.name === roundName) {
-        fullOrder.push(...orderedIdsInGroup);
-      } else {
-        fullOrder.push(...g.items.map((q) => q.id));
-      }
-    }
+  async function handleListChange(
+    orderedIds: string[],
+    roundChanges: { id: string; round_name: string | null }[],
+  ) {
     setBusy("order");
     try {
+      // Persist round_name changes first so the upcoming reorder lands
+      // on rows with the right round assignments.
+      if (roundChanges.length > 0) {
+        await Promise.all(
+          roundChanges.map((rc) =>
+            call(`/api/rooms/${roomCode}/questions/edit`, {
+              id: rc.id,
+              round_name: rc.round_name,
+            }),
+          ),
+        );
+      }
+      // Persist the new global order in one atomic SQL function.
       await call(`/api/rooms/${roomCode}/questions/order`, {
-        order: fullOrder,
+        order: orderedIds,
       });
     } finally {
       setBusy(null);
@@ -1081,71 +1115,61 @@ function QuestionListPanel({
         </button>
       </div>
       <p className="text-xs text-zinc-500">
-        Dra ⋮⋮ for å endre rekkefølge. Klikk på spørsmålet for å hoppe dit
-        – spillerne ser det med en gang.
+        Dra ⋮⋮ for å endre rekkefølge. Du kan også dra rundenavnene for
+        å flytte hele runder. Klikk på spørsmålet for å hoppe dit –
+        spillerne ser det med en gang.
       </p>
-      {groupedQuestions.map((group) => (
-        <div key={group.name || "_none"} className="space-y-1">
-          <RoundHeader
-            name={group.name}
-            questionIds={group.items.map((q) => q.id)}
-            roomCode={roomCode}
-            call={call}
-          />
-          <SortableQuestionList
-            questions={group.items.map((q) => {
-              const globalIndex = questions.findIndex((x) => x.id === q.id);
-              return {
-                id: q.id,
-                position: q.position,
-                render: () => (
-                  <QuestionListRow
-                    q={q}
-                    index={globalIndex}
-                    isCurrent={q.id === currentId}
-                    isEditing={editingId === q.id}
-                    answerCount={
-                      allAnswers.filter((a) => a.question_id === q.id).length
-                    }
-                    playerCount={playerCount}
-                    onJump={async () => {
-                      setBusy(q.id);
-                      try {
-                        await call(`/api/rooms/${roomCode}/state`, {
-                          current_question_id: q.id,
-                        });
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                    onDelete={async () => {
-                      if (!confirm("Slette dette spørsmålet?")) return;
-                      setBusy(q.id);
-                      try {
-                        await call(
-                          `/api/rooms/${q.room_code}/questions/delete`,
-                          { id: q.id },
-                        );
-                      } finally {
-                        setBusy(null);
-                      }
-                    }}
-                    onEdit={() =>
-                      setEditingId(editingId === q.id ? null : q.id)
-                    }
-                    onSaved={() => setEditingId(null)}
-                    call={call}
-                    busy={busy !== null}
-                  />
-                ),
-              };
-            })}
-            onReorder={(orderedIds) =>
-              persistGroupOrder(group.name, orderedIds)
+      <QuestionListWithRounds
+        questions={questions}
+        currentId={currentId}
+        busyId={busy}
+        editingId={editingId}
+        answerCount={(qid) =>
+          allAnswers.filter((a) => a.question_id === qid).length
+        }
+        playerCount={playerCount}
+        renderRow={(q, globalIndex) => (
+          <QuestionListRow
+            q={q}
+            index={globalIndex}
+            isCurrent={q.id === currentId}
+            isEditing={editingId === q.id}
+            answerCount={
+              allAnswers.filter((a) => a.question_id === q.id).length
             }
+            playerCount={playerCount}
+            onJump={async () => {
+              setBusy(q.id);
+              try {
+                await call(`/api/rooms/${roomCode}/state`, {
+                  current_question_id: q.id,
+                });
+              } finally {
+                setBusy(null);
+              }
+            }}
+            onDelete={async () => {
+              if (!confirm("Slette dette spørsmålet?")) return;
+              setBusy(q.id);
+              try {
+                await call(
+                  `/api/rooms/${q.room_code}/questions/delete`,
+                  { id: q.id },
+                );
+              } finally {
+                setBusy(null);
+              }
+            }}
+            onEdit={() =>
+              setEditingId(editingId === q.id ? null : q.id)
+            }
+            onSaved={() => setEditingId(null)}
+            call={call}
+            busy={busy !== null}
           />
-        </div>
-      ))}
+        )}
+        onChange={handleListChange}
+      />
       {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
   );

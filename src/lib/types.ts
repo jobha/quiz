@@ -13,6 +13,7 @@ export type Room = {
   spotlight_answer_id: string | null;
   host_avatar_emoji: string | null;
   host_avatar_color: string | null;
+  summary_round_name: string | null;
   created_at: string;
 };
 
