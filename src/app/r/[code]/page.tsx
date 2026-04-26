@@ -25,6 +25,8 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [myAnswers, setMyAnswers] = useState<Record<string, Answer>>({});
   const [answeredQuestions, setAnsweredQuestions] = useState<Question[]>([]);
+  const [allAnswers, setAllAnswers] = useState<Answer[]>([]);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
 
   const storageKey = `quiz:player:${code}`;
 
@@ -96,6 +98,80 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       sb.removeChannel(channel);
     };
   }, [code]);
+
+  // For the player-facing scoreboard: load all answers + questions
+  // for this room and stay in sync. Cheap because the room is small.
+  useEffect(() => {
+    if (!room?.show_scoreboard) {
+      setAllAnswers([]);
+      setAllQuestions([]);
+      return;
+    }
+    const sb = supabaseBrowser();
+    let cancelled = false;
+
+    async function load() {
+      const [{ data: ans }, { data: qs }] = await Promise.all([
+        sb.from("answers").select("*").eq("room_code", code),
+        sb.from("questions").select("*").eq("room_code", code),
+      ]);
+      if (cancelled) return;
+      if (ans) setAllAnswers(ans as Answer[]);
+      if (qs) setAllQuestions(qs as Question[]);
+    }
+    load();
+
+    const channel = sb
+      .channel(`scoreboard:${code}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "answers", filter: `room_code=eq.${code}` },
+        (payload) => {
+          setAllAnswers((prev) => {
+            if (payload.eventType === "INSERT")
+              return [...prev, payload.new as Answer];
+            if (payload.eventType === "UPDATE")
+              return prev.map((a) =>
+                a.id === (payload.new as Answer).id
+                  ? (payload.new as Answer)
+                  : a,
+              );
+            if (payload.eventType === "DELETE") {
+              const removed = payload.old as { id: string };
+              return prev.filter((a) => a.id !== removed.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "questions", filter: `room_code=eq.${code}` },
+        (payload) => {
+          setAllQuestions((prev) => {
+            if (payload.eventType === "INSERT")
+              return [...prev, payload.new as Question];
+            if (payload.eventType === "UPDATE")
+              return prev.map((q) =>
+                q.id === (payload.new as Question).id
+                  ? (payload.new as Question)
+                  : q,
+              );
+            if (payload.eventType === "DELETE") {
+              const removed = payload.old as { id: string };
+              return prev.filter((q) => q.id !== removed.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      sb.removeChannel(channel);
+    };
+  }, [code, room?.show_scoreboard]);
 
   // Load current question whenever it changes.
   useEffect(() => {
@@ -219,6 +295,19 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     return s;
   }, [myAnswers, answeredQuestions]);
 
+  const allScores = useMemo(() => {
+    const byQ: Record<string, Question> = {};
+    for (const q of allQuestions) byQ[q.id] = q;
+    const out: Record<string, number> = {};
+    for (const p of players) out[p.id] = 0;
+    for (const a of allAnswers) {
+      if (a.is_correct) {
+        out[a.player_id] = (out[a.player_id] ?? 0) + (byQ[a.question_id]?.points ?? 1);
+      }
+    }
+    return out;
+  }, [allAnswers, allQuestions, players]);
+
   if (!room) {
     return (
       <Centered>
@@ -296,27 +385,73 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         code={code}
       />
 
-      <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
-        <h2 className="text-sm font-semibold text-zinc-400 mb-3">
-          Players ({players.length})
-        </h2>
-        <ul className="grid grid-cols-2 gap-2">
-          {players.map((p) => (
-            <li
-              key={p.id}
-              className={
-                "rounded-md px-3 py-2 text-sm " +
-                (p.id === playerId
-                  ? "bg-indigo-500/20 text-indigo-200"
-                  : "bg-zinc-950")
-              }
-            >
-              {p.name}
-            </li>
-          ))}
-        </ul>
-      </section>
+      {room.show_scoreboard ? (
+        <ScoreboardForPlayers
+          players={players}
+          scores={allScores}
+          myId={playerId}
+        />
+      ) : (
+        <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
+          <h2 className="text-sm font-semibold text-zinc-400 mb-3">
+            Players ({players.length})
+          </h2>
+          <ul className="grid grid-cols-2 gap-2">
+            {players.map((p) => (
+              <li
+                key={p.id}
+                className={
+                  "rounded-md px-3 py-2 text-sm " +
+                  (p.id === playerId
+                    ? "bg-indigo-500/20 text-indigo-200"
+                    : "bg-zinc-950")
+                }
+              >
+                {p.name}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
+  );
+}
+
+function ScoreboardForPlayers({
+  players,
+  scores,
+  myId,
+}: {
+  players: Player[];
+  scores: Record<string, number>;
+  myId: string;
+}) {
+  const sorted = [...players].sort(
+    (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
+  );
+  return (
+    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
+      <h2 className="text-sm font-semibold text-zinc-400 mb-3">Scoreboard</h2>
+      <ol className="space-y-1">
+        {sorted.map((p, i) => (
+          <li
+            key={p.id}
+            className={
+              "flex items-center justify-between text-sm rounded px-3 py-2 " +
+              (p.id === myId
+                ? "bg-indigo-500/20 text-indigo-100"
+                : "bg-zinc-950")
+            }
+          >
+            <span>
+              <span className="text-zinc-500 mr-2">{i + 1}.</span>
+              {p.name}
+            </span>
+            <span className="font-mono font-semibold">{scores[p.id] ?? 0}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

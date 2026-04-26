@@ -10,9 +10,11 @@ create table if not exists rooms (
   host_rejoin_code   text,                             -- short shareable host code
   phase              text not null default 'lobby',    -- lobby | asking | revealed | ended
   current_question_id uuid,
+  show_scoreboard    boolean not null default false,
   created_at         timestamptz not null default now()
 );
 alter table rooms add column if not exists host_rejoin_code text;
+alter table rooms add column if not exists show_scoreboard boolean not null default false;
 
 -- Questions --------------------------------------------------------------
 create table if not exists questions (

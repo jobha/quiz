@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { normalizeRoomCode } from "@/lib/room-code";
-import { autoGrade } from "@/lib/grading";
 import type { Question } from "@/lib/types";
 
 export async function POST(
@@ -56,14 +55,10 @@ export async function POST(
   if (!question) return new NextResponse("Question not found", { status: 404 });
   const q = question as Pick<Question, "id" | "type" | "correct_answer" | "choices">;
 
-  // Auto-grade for multiple-choice. Free text is auto-graded too,
-  // but the host can override during reveal.
-  let isCorrect: boolean | null = null;
-  if (q.type === "choice") {
-    isCorrect = answerText === q.correct_answer;
-  } else {
-    isCorrect = autoGrade(answerText, q.correct_answer);
-  }
+  // Multiple-choice is auto-graded against the correct answer.
+  // Free text is left unjudged — the host marks it during reveal.
+  const isCorrect: boolean | null =
+    q.type === "choice" ? answerText === q.correct_answer : null;
 
   const { error } = await sb
     .from("answers")

@@ -19,6 +19,7 @@ export async function POST(
   const body = (await req.json().catch(() => null)) as {
     phase?: string;
     current_question_id?: string | null;
+    show_scoreboard?: boolean;
   } | null;
 
   const update: Record<string, unknown> = {};
@@ -30,6 +31,9 @@ export async function POST(
   }
   if (body && Object.prototype.hasOwnProperty.call(body, "current_question_id")) {
     update.current_question_id = body.current_question_id;
+  }
+  if (body && typeof body.show_scoreboard === "boolean") {
+    update.show_scoreboard = body.show_scoreboard;
   }
   if (Object.keys(update).length === 0) {
     return new NextResponse("Nothing to update", { status: 400 });

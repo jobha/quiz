@@ -5,6 +5,7 @@ export type Room = {
   code: string;
   phase: Phase;
   current_question_id: string | null;
+  show_scoreboard: boolean;
   created_at: string;
 };
 

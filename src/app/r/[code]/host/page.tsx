@@ -57,7 +57,9 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         await Promise.all([
           sb
             .from("rooms")
-            .select("code, phase, current_question_id, host_rejoin_code, created_at")
+            .select(
+              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, created_at",
+            )
             .eq("code", code)
             .maybeSingle(),
           sb.from("questions").select("*").eq("room_code", code).order("position"),
@@ -279,7 +281,12 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             existingCount={questions.length}
             call={call}
           />
-          <ScoreboardPanel players={players} scores={scores} />
+          <ScoreboardPanel
+            room={room}
+            players={players}
+            scores={scores}
+            call={call}
+          />
         </div>
       </div>
     </main>
@@ -702,18 +709,50 @@ function AddQuestionPanel({
 }
 
 function ScoreboardPanel({
+  room,
   players,
   scores,
+  call,
 }: {
+  room: RoomWithHostCode;
   players: Player[];
   scores: Record<string, number>;
+  call: (path: string, body: unknown) => Promise<unknown>;
 }) {
+  const [busy, setBusy] = useState(false);
   const sorted = [...players].sort(
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
   );
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      await call(`/api/rooms/${room.code}/state`, {
+        show_scoreboard: !room.show_scoreboard,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
-      <h2 className="font-semibold">Scoreboard</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">Scoreboard</h2>
+        <button
+          onClick={toggle}
+          disabled={busy}
+          className={
+            "text-xs px-3 py-1 rounded-full border " +
+            (room.show_scoreboard
+              ? "bg-emerald-500/20 border-emerald-500 text-emerald-100"
+              : "bg-zinc-950 border-zinc-700 text-zinc-400")
+          }
+          title="Toggle whether players see the scoreboard"
+        >
+          {room.show_scoreboard ? "Visible to players" : "Hidden from players"}
+        </button>
+      </div>
       {players.length === 0 ? (
         <p className="text-sm text-zinc-500">No players yet.</p>
       ) : (
