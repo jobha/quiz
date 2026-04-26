@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import { Avatar } from "@/components/Avatar";
 
 const STYLE_ID = "reactions-layer-keyframes";
 const KEYFRAMES = `
@@ -40,18 +41,36 @@ function hashLeft(id: string): number {
   for (let i = 0; i < id.length; i++) {
     sum = (sum + id.charCodeAt(i)) % 1000;
   }
-  // Map deterministically to [10, 90].
   return 10 + (sum % 81);
 }
 
+type LayerReaction = {
+  id: string;
+  emoji: string;
+  ts: number;
+  player_id: string | null;
+};
+
+type LayerPlayer = {
+  id: string;
+  name: string;
+  avatar_emoji: string | null;
+  avatar_color: string | null;
+};
+
 export function ReactionsLayer({
   reactions,
+  players,
 }: {
-  reactions: { id: string; emoji: string; ts: number }[];
+  reactions: LayerReaction[];
+  players?: LayerPlayer[];
 }) {
   useEffect(() => {
     ensureStyleInjected();
   }, []);
+
+  const playerMap: Record<string, LayerPlayer> = {};
+  for (const p of players ?? []) playerMap[p.id] = p;
 
   return (
     <div
@@ -61,17 +80,29 @@ export function ReactionsLayer({
     >
       {reactions.map((r) => {
         const left = hashLeft(r.id);
+        const sender = r.player_id ? playerMap[r.player_id] : null;
         return (
           <span
             key={r.id}
-            className="reactions-layer-emoji text-4xl"
+            className="reactions-layer-emoji"
             style={{
               position: "absolute",
               left: `${left}%`,
               bottom: "20%",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
             }}
           >
-            {r.emoji}
+            {sender && (
+              <Avatar
+                emoji={sender.avatar_emoji}
+                color={sender.avatar_color}
+                name={sender.name}
+                size="sm"
+              />
+            )}
+            <span className="text-4xl">{r.emoji}</span>
           </span>
         );
       })}

@@ -12,10 +12,7 @@ import { Avatar } from "@/components/Avatar";
 import { Podium } from "@/components/Podium";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
-import {
-  useReactionSender,
-  useReactionReceiver,
-} from "@/lib/reactions";
+import { useRoomReactions } from "@/lib/reactions";
 import { useTypingBroadcast } from "@/lib/typing-presence";
 
 type Params = { code: string };
@@ -62,8 +59,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
 
   // Hooks below this line must run on every render — keep them
   // unconditional and above the early returns.
-  const { sendReaction } = useReactionSender(code);
-  const { reactions } = useReactionReceiver(code);
+  const { sendReaction, reactions } = useRoomReactions(code, playerId);
 
   const storageKey = `quiz:player:${code}`;
 
@@ -543,7 +539,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         />
       )}
       {!previewMode && <Confetti trigger={room.phase === "ended"} />}
-      {!previewMode && <ReactionsLayer reactions={reactions} />}
+      {!previewMode && <ReactionsLayer reactions={reactions} players={players} />}
       {!previewMode && spotlightAnswer && spotlightPlayer && (
         <SpotlightOverlay
           answer={spotlightAnswer}

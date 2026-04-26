@@ -17,10 +17,7 @@ import { Avatar } from "@/components/Avatar";
 import { ReactionsLayer } from "@/components/ReactionsLayer";
 import { ReactionsBar } from "@/components/ReactionsBar";
 import { Podium } from "@/components/Podium";
-import {
-  useReactionSender,
-  useReactionReceiver,
-} from "@/lib/reactions";
+import { useRoomReactions } from "@/lib/reactions";
 import { useTypingListeners } from "@/lib/typing-presence";
 
 type RoomWithHostCode = Room & { host_rejoin_code: string | null };
@@ -59,8 +56,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
 
   // Reaction hooks — must run unconditionally on every render.
-  const { sendReaction } = useReactionSender(code);
-  const { reactions } = useReactionReceiver(code);
+  const { sendReaction, reactions } = useRoomReactions(code, null);
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -310,7 +306,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           }}
         />
       )}
-      <ReactionsLayer reactions={reactions} />
+      <ReactionsLayer reactions={reactions} players={players} />
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
