@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeRoomCode } from "@/lib/room-code";
-import type { Answer, Player, Question, Room } from "@/lib/types";
+import type { Answer, BonusPoints, Player, Question, Room } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Confetti } from "@/components/Confetti";
 import { AudioClue } from "@/components/AudioClue";
@@ -321,7 +321,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [room?.current_question_id]);
 
-  // Watch for bonuses awarded to this player → celebratory toast.
+  // Pop a toast when this player gets a new bonus.
   useEffect(() => {
     if (!playerId || previewMode) return;
     const sb = supabaseBrowser();
@@ -336,11 +336,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           filter: `player_id=eq.${playerId}`,
         },
         (payload) => {
-          const row = payload.new as {
-            id: string;
-            points: number;
-            reason: string | null;
-          };
+          const row = payload.new as BonusPoints;
           setBonusToast({
             id: row.id,
             points: row.points,
@@ -681,6 +677,21 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
               Poeng
             </p>
             <p className="text-2xl font-bold leading-none">{myScore}</p>
+            {playerId && bonusByPlayer[playerId] !== undefined &&
+              bonusByPlayer[playerId] !== 0 && (
+                <p
+                  className={
+                    "text-xs font-mono mt-1 " +
+                    (bonusByPlayer[playerId] > 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-500 dark:text-red-400")
+                  }
+                  title="Bonus / straff fra quizmasteren"
+                >
+                  {bonusByPlayer[playerId] > 0 ? "+" : ""}
+                  {bonusByPlayer[playerId]} bonus
+                </p>
+              )}
           </div>
         )}
       </header>
@@ -718,6 +729,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         <ScoreboardForPlayers
           players={players}
           scores={allScores}
+          bonusByPlayer={bonusByPlayer}
           myId={playerId ?? ""}
           hideCodes={room.hide_rejoin_codes}
         />
@@ -769,11 +781,13 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
 function ScoreboardForPlayers({
   players,
   scores,
+  bonusByPlayer,
   myId,
   hideCodes,
 }: {
   players: Player[];
   scores: Record<string, number>;
+  bonusByPlayer: Record<string, number>;
   myId: string;
   hideCodes: boolean;
 }) {
@@ -784,38 +798,55 @@ function ScoreboardForPlayers({
     <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
       <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Poengtavle</h2>
       <ol className="space-y-1">
-        {sorted.map((p, i) => (
-          <li
-            key={p.id}
-            className={
-              "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
-              (p.id === myId
-                ? "accent-bg-faded accent-text"
-                : "bg-zinc-50 dark:bg-zinc-950")
-            }
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="text-zinc-500 w-5 text-right">{i + 1}.</span>
-              <Avatar
-                emoji={p.avatar_emoji}
-                color={p.avatar_color}
-                name={p.name}
-                size="sm"
-              />
-              <span className="truncate">{p.name}</span>
-            </span>
-            <span className="flex items-center gap-3 shrink-0">
-              {!hideCodes && p.rejoin_code && (
-                <span className="font-mono text-xs tracking-widest text-zinc-500">
-                  {p.rejoin_code}
-                </span>
-              )}
-              <span className="font-mono font-semibold">
-                {scores[p.id] ?? 0}
+        {sorted.map((p, i) => {
+          const bonus = bonusByPlayer[p.id] ?? 0;
+          return (
+            <li
+              key={p.id}
+              className={
+                "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
+                (p.id === myId
+                  ? "accent-bg-faded accent-text"
+                  : "bg-zinc-50 dark:bg-zinc-950")
+              }
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="text-zinc-500 w-5 text-right">{i + 1}.</span>
+                <Avatar
+                  emoji={p.avatar_emoji}
+                  color={p.avatar_color}
+                  name={p.name}
+                  size="sm"
+                />
+                <span className="truncate">{p.name}</span>
               </span>
-            </span>
-          </li>
-        ))}
+              <span className="flex items-center gap-3 shrink-0">
+                {!hideCodes && p.rejoin_code && (
+                  <span className="font-mono text-xs tracking-widest text-zinc-500">
+                    {p.rejoin_code}
+                  </span>
+                )}
+                {bonus !== 0 && (
+                  <span
+                    className={
+                      "font-mono text-xs " +
+                      (bonus > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-500 dark:text-red-400")
+                    }
+                    title="Bonus / straff"
+                  >
+                    {bonus > 0 ? "+" : ""}
+                    {bonus}
+                  </span>
+                )}
+                <span className="font-mono font-semibold">
+                  {scores[p.id] ?? 0}
+                </span>
+              </span>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
