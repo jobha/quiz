@@ -944,12 +944,31 @@ function AddQuestionPanel({
           <label className="block text-xs text-zinc-500">
             Bilde (valgfritt, maks 5 MB)
           </label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif"
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-zinc-700 dark:text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-zinc-200 hover:file:bg-zinc-700"
-          />
+          <div className="flex items-center gap-2">
+            <label className="cursor-pointer rounded-md bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 px-3 py-1.5 text-sm whitespace-nowrap">
+              {imageFile ? "Bytt bilde" : "Velg bilde"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+                className="hidden"
+              />
+            </label>
+            {imageFile && (
+              <>
+                <span className="text-xs text-zinc-600 dark:text-zinc-400 truncate flex-1">
+                  {imageFile.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleFile(null)}
+                  className="text-xs text-zinc-500 hover:text-red-400 shrink-0"
+                >
+                  Fjern
+                </button>
+              </>
+            )}
+          </div>
           {imagePreview && (
             <img
               src={imagePreview}
