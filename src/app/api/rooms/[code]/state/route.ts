@@ -35,6 +35,9 @@ export async function POST(
   }
   if (body && Object.prototype.hasOwnProperty.call(body, "current_question_id")) {
     update.current_question_id = body.current_question_id;
+    // Auto-clear the spotlight when navigating to a different question;
+    // the host can re-spotlight intentionally.
+    update.spotlight_answer_id = null;
   }
   if (body && typeof body.show_scoreboard === "boolean") {
     update.show_scoreboard = body.show_scoreboard;

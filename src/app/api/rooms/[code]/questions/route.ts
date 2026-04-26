@@ -26,6 +26,7 @@ export async function POST(
     tolerance?: number | null;
     image_url?: string | null;
     audio_url?: string | null;
+    round_name?: string | null;
   } | null;
 
   const type = body?.type;
@@ -41,6 +42,10 @@ export async function POST(
   const audioUrl =
     typeof body?.audio_url === "string" && body.audio_url.trim()
       ? body.audio_url.trim()
+      : null;
+  const roundName =
+    typeof body?.round_name === "string" && body.round_name.trim()
+      ? body.round_name.trim().slice(0, 80)
       : null;
 
   if (!type || !VALID_TYPES.has(type)) {
@@ -128,6 +133,7 @@ export async function POST(
       points,
       image_url: imageUrl,
       audio_url: audioUrl,
+      round_name: roundName,
     })
     .select("id")
     .single();

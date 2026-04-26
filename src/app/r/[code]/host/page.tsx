@@ -13,6 +13,14 @@ import type {
 } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SortableQuestionList } from "@/components/SortableQuestionList";
+import { Avatar } from "@/components/Avatar";
+import { ReactionsLayer } from "@/components/ReactionsLayer";
+import { ReactionsBar } from "@/components/ReactionsBar";
+import { Podium } from "@/components/Podium";
+import {
+  useReactionSender,
+  useReactionReceiver,
+} from "@/lib/reactions";
 import { useTypingListeners } from "@/lib/typing-presence";
 
 type RoomWithHostCode = Room & { host_rejoin_code: string | null };
@@ -48,30 +56,46 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
+  const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
+
+  // Reaction hooks — must run unconditionally on every render.
+  const { sendReaction } = useReactionSender(code);
+  const { reactions } = useReactionReceiver(code);
 
   useEffect(() => {
     const sb = supabaseBrowser();
     let cancelled = false;
 
     async function load() {
-      const [{ data: roomData }, { data: qs }, { data: ps }, { data: as }] =
-        await Promise.all([
-          sb
-            .from("rooms")
-            .select(
-              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, created_at",
-            )
-            .eq("code", code)
-            .maybeSingle(),
-          sb.from("questions").select("*").eq("room_code", code).order("position"),
-          sb.from("players").select("*").eq("room_code", code).order("created_at"),
-          sb.from("answers").select("*").eq("room_code", code),
-        ]);
+      const [
+        { data: roomData },
+        { data: qs },
+        { data: ps },
+        { data: as },
+        { data: bs },
+      ] = await Promise.all([
+        sb
+          .from("rooms")
+          .select(
+            "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, created_at",
+          )
+          .eq("code", code)
+          .maybeSingle(),
+        sb.from("questions").select("*").eq("room_code", code).order("position"),
+        sb.from("players").select("*").eq("room_code", code).order("created_at"),
+        sb.from("answers").select("*").eq("room_code", code),
+        sb.from("bonus_points").select("player_id, points").eq("room_code", code),
+      ]);
       if (cancelled) return;
       setRoom((roomData as RoomWithHostCode) ?? null);
       setQuestions((qs as Question[]) ?? []);
       setPlayers((ps as Player[]) ?? []);
       setAnswers((as as Answer[]) ?? []);
+      const bonusMap: Record<string, number> = {};
+      for (const b of (bs ?? []) as { player_id: string; points: number }[]) {
+        bonusMap[b.player_id] = (bonusMap[b.player_id] ?? 0) + b.points;
+      }
+      setBonusByPlayer(bonusMap);
     }
     load();
 
@@ -149,6 +173,36 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "bonus_points", filter: `room_code=eq.${code}` },
+        () => {
+          // Refetch the aggregate on any bonus_points change.
+          sb.from("bonus_points")
+            .select("player_id, points")
+            .eq("room_code", code)
+            .then(({ data }) => {
+              if (!data) return;
+              const map: Record<string, number> = {};
+              for (const b of data as { player_id: string; points: number }[]) {
+                map[b.player_id] = (map[b.player_id] ?? 0) + b.points;
+              }
+              setBonusByPlayer(map);
+            });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "players", filter: `room_code=eq.${code}` },
+        (payload) => {
+          if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Player;
+            setPlayers((prev) =>
+              prev.map((p) => (p.id === updated.id ? updated : p)),
+            );
+          }
+        },
+      )
       .subscribe();
 
     return () => {
@@ -206,8 +260,11 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         out[a.player_id] = (out[a.player_id] ?? 0) + a.points_awarded;
       }
     }
+    for (const [pid, bonus] of Object.entries(bonusByPlayer)) {
+      out[pid] = (out[pid] ?? 0) + bonus;
+    }
     return out;
-  }, [answers, players]);
+  }, [answers, players, bonusByPlayer]);
 
   if (!room) {
     return (
@@ -236,7 +293,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     ? `${window.location.origin}/r/${code}`
     : `/r/${code}`;
 
-  const accentStyle = room.accent_color
+  const accentStyle = room?.accent_color
     ? ({ ["--accent" as never]: room.accent_color } as React.CSSProperties)
     : undefined;
   return (
@@ -253,6 +310,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           }}
         />
       )}
+      <ReactionsLayer reactions={reactions} />
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -290,6 +348,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             questions={questions}
             answers={currentAnswers}
             players={players}
+            scores={scores}
             call={call}
           />
           <QuestionListPanel
@@ -313,6 +372,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             scores={scores}
             questions={questions}
             answers={answers}
+            bonusByPlayer={bonusByPlayer}
             roomCode={code}
             call={call}
           />
@@ -321,6 +381,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
       </div>
 
       <SettingsPanel room={room} call={call} hostSecret={hostSecret} />
+
+      <ReactionsBar onReact={(emoji) => sendReaction(emoji)} />
     </main>
   );
 }
@@ -378,6 +440,7 @@ function CurrentQuestionPanel({
   questions,
   answers,
   players,
+  scores,
   call,
 }: {
   room: RoomWithHostCode;
@@ -385,6 +448,7 @@ function CurrentQuestionPanel({
   questions: Question[];
   answers: Answer[];
   players: Player[];
+  scores: Record<string, number>;
   call: (path: string, body: unknown) => Promise<unknown>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -416,7 +480,9 @@ function CurrentQuestionPanel({
 
   if (room.phase === "ended") {
     return (
-      <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
+      <div className="space-y-4">
+        <Podium players={players} scores={scores} />
+        <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
         <h2 className="font-semibold">Quizen er ferdig</h2>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Vil du fortsette? Du kan hoppe tilbake til et tidligere spørsmål
@@ -456,7 +522,8 @@ function CurrentQuestionPanel({
           </button>
         </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
-      </section>
+        </section>
+      </div>
     );
   }
 
@@ -527,10 +594,11 @@ function CurrentQuestionPanel({
                   <AnswerRow
                     key={a.id}
                     answer={a}
-                    playerName={playerById[a.player_id]?.name ?? "?"}
+                    player={playerById[a.player_id]}
                     maxPoints={question?.points ?? 1}
                     roomCode={room.code}
                     call={call}
+                    spotlit={room.spotlight_answer_id === a.id}
                   />
                 ))}
               </ul>
@@ -648,16 +716,18 @@ function CurrentQuestionPanel({
 
 function AnswerRow({
   answer,
-  playerName,
+  player,
   maxPoints,
   roomCode,
   call,
+  spotlit,
 }: {
   answer: Answer;
-  playerName: string;
+  player: Player | undefined;
   maxPoints: number;
   roomCode: string;
   call: (path: string, body: unknown) => Promise<unknown>;
+  spotlit: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [pointsInput, setPointsInput] = useState<string>(
@@ -696,13 +766,47 @@ function AnswerRow({
     answer.points_awarded !== maxPoints &&
     answer.points_awarded !== 0;
 
+  async function spotlight(next: boolean) {
+    setBusy(true);
+    try {
+      await call(`/api/rooms/${roomCode}/spotlight`, {
+        answer_id: next ? answer.id : null,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <li className="flex items-center justify-between gap-2 text-sm">
-      <div className="min-w-0">
-        <span className="text-zinc-600 dark:text-zinc-400">{playerName}</span>{" "}
+      <div className="min-w-0 flex items-center gap-2">
+        {player && (
+          <Avatar
+            emoji={player.avatar_emoji}
+            color={player.avatar_color}
+            name={player.name}
+            size="sm"
+          />
+        )}
+        <span className="text-zinc-600 dark:text-zinc-400">
+          {player?.name ?? "?"}
+        </span>{" "}
         <span className="font-medium">{answer.answer}</span>
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          disabled={busy}
+          onClick={() => spotlight(!spotlit)}
+          className={
+            "px-2 py-0.5 text-xs rounded " +
+            (spotlit
+              ? "bg-amber-500 text-zinc-900"
+              : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-amber-500/30")
+          }
+          title={spotlit ? "Slå av lyskasteren" : "Vis dette svaret stort på alle skjermer"}
+        >
+          🔍
+        </button>
         <button
           disabled={busy}
           onClick={() => award(maxPoints)}
@@ -804,11 +908,39 @@ function QuestionListPanel({
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  async function persistOrder(orderedIds: string[]) {
+  // Group questions by round_name (treating null/empty as "Uten runde").
+  // Each group keeps its questions in their existing position order. The
+  // group order is determined by the first appearance of each round in
+  // the position-sorted list.
+  const groupedQuestions = useMemo(() => {
+    const order: string[] = [];
+    const groups: Record<string, Question[]> = {};
+    for (const q of questions) {
+      const key = q.round_name?.trim() || "";
+      if (!(key in groups)) {
+        groups[key] = [];
+        order.push(key);
+      }
+      groups[key].push(q);
+    }
+    return order.map((key) => ({ name: key, items: groups[key] }));
+  }, [questions]);
+
+  async function persistGroupOrder(roundName: string, orderedIdsInGroup: string[]) {
+    // Compose a global order: walk groups; for the affected round, swap
+    // in the new ordering; everything else stays in current order.
+    const fullOrder: string[] = [];
+    for (const g of groupedQuestions) {
+      if (g.name === roundName) {
+        fullOrder.push(...orderedIdsInGroup);
+      } else {
+        fullOrder.push(...g.items.map((q) => q.id));
+      }
+    }
     setBusy("order");
     try {
       await call(`/api/rooms/${roomCode}/questions/order`, {
-        order: orderedIds,
+        order: fullOrder,
       });
     } finally {
       setBusy(null);
@@ -833,53 +965,68 @@ function QuestionListPanel({
         Dra ⋮⋮ for å endre rekkefølge. Klikk på spørsmålet for å hoppe dit
         – spillerne ser det med en gang.
       </p>
-      <SortableQuestionList
-        questions={questions.map((q, i) => ({
-          id: q.id,
-          position: q.position,
-          render: () => (
-            <QuestionListRow
-              q={q}
-              index={i}
-              isCurrent={q.id === currentId}
-              isEditing={editingId === q.id}
-              answerCount={
-                allAnswers.filter((a) => a.question_id === q.id).length
-              }
-              playerCount={playerCount}
-              onJump={async () => {
-                setBusy(q.id);
-                try {
-                  await call(`/api/rooms/${roomCode}/state`, {
-                    current_question_id: q.id,
-                  });
-                } finally {
-                  setBusy(null);
-                }
-              }}
-              onDelete={async () => {
-                if (!confirm("Slette dette spørsmålet?")) return;
-                setBusy(q.id);
-                try {
-                  await call(
-                    `/api/rooms/${q.room_code}/questions/delete`,
-                    { id: q.id },
-                  );
-                } finally {
-                  setBusy(null);
-                }
-              }}
-              onEdit={() =>
-                setEditingId(editingId === q.id ? null : q.id)
-              }
-              onSaved={() => setEditingId(null)}
-              call={call}
-              busy={busy !== null}
-            />
-          ),
-        }))}
-        onReorder={persistOrder}
-      />
+      {groupedQuestions.map((group) => (
+        <div key={group.name || "_none"} className="space-y-1">
+          <RoundHeader
+            name={group.name}
+            questionIds={group.items.map((q) => q.id)}
+            roomCode={roomCode}
+            call={call}
+          />
+          <SortableQuestionList
+            questions={group.items.map((q) => {
+              const globalIndex = questions.findIndex((x) => x.id === q.id);
+              return {
+                id: q.id,
+                position: q.position,
+                render: () => (
+                  <QuestionListRow
+                    q={q}
+                    index={globalIndex}
+                    isCurrent={q.id === currentId}
+                    isEditing={editingId === q.id}
+                    answerCount={
+                      allAnswers.filter((a) => a.question_id === q.id).length
+                    }
+                    playerCount={playerCount}
+                    onJump={async () => {
+                      setBusy(q.id);
+                      try {
+                        await call(`/api/rooms/${roomCode}/state`, {
+                          current_question_id: q.id,
+                        });
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    onDelete={async () => {
+                      if (!confirm("Slette dette spørsmålet?")) return;
+                      setBusy(q.id);
+                      try {
+                        await call(
+                          `/api/rooms/${q.room_code}/questions/delete`,
+                          { id: q.id },
+                        );
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                    onEdit={() =>
+                      setEditingId(editingId === q.id ? null : q.id)
+                    }
+                    onSaved={() => setEditingId(null)}
+                    call={call}
+                    busy={busy !== null}
+                  />
+                ),
+              };
+            })}
+            onReorder={(orderedIds) =>
+              persistGroupOrder(group.name, orderedIds)
+            }
+          />
+        </div>
+      ))}
       {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
   );
@@ -940,7 +1087,7 @@ function QuestionListRow({
         </button>
         <span
           className={
-            "text-xs shrink-0 mr-1 font-mono " +
+            "text-xs shrink-0 mr-1 font-mono w-10 text-right tabular-nums " +
             (answerCount === 0
               ? "text-zinc-500"
               : answerCount === playerCount
@@ -970,7 +1117,7 @@ function QuestionListRow({
         >
           {q.revealed ? "✓" : answerCount > 0 ? "…" : ""}
         </span>
-        <span className="text-xs text-zinc-500 shrink-0 mr-1">
+        <span className="text-xs text-zinc-500 shrink-0 mr-1 w-20 text-right tabular-nums">
           {typeLabel} · {q.points}p
         </span>
         <button
@@ -1213,6 +1360,7 @@ function AddQuestionPanel({
   const [tolerance, setTolerance] = useState("0"); // for numeric
   const [choicesText, setChoicesText] = useState("");
   const [points, setPoints] = useState(1);
+  const [roundName, setRoundName] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -1287,6 +1435,7 @@ function AddQuestionPanel({
         points,
         image_url: imageUrl,
         audio_url: audioUrl,
+        round_name: roundName.trim() || null,
       });
       setPrompt("");
       setCorrect("");
@@ -1294,6 +1443,7 @@ function AddQuestionPanel({
       setTolerance("0");
       setChoicesText("");
       setPoints(1);
+      // Keep roundName so the host can chain questions in the same round.
       handleImage(null);
       setAudioFile(null);
     } catch (e) {
@@ -1331,6 +1481,14 @@ function AddQuestionPanel({
             </button>
           ))}
         </div>
+
+        <input
+          value={roundName}
+          onChange={(e) => setRoundName(e.target.value)}
+          placeholder="Runde (valgfritt – f.eks. «Norsk pop»)"
+          maxLength={80}
+          className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
+        />
 
         <textarea
           value={prompt}
@@ -1494,6 +1652,7 @@ function ScoreboardPanel({
   scores,
   questions,
   answers,
+  bonusByPlayer,
   roomCode,
   call,
 }: {
@@ -1501,6 +1660,7 @@ function ScoreboardPanel({
   scores: Record<string, number>;
   questions: Question[];
   answers: Answer[];
+  bonusByPlayer: Record<string, number>;
   roomCode: string;
   call: (path: string, body: unknown) => Promise<unknown>;
 }) {
@@ -1535,9 +1695,17 @@ function ScoreboardPanel({
                       : "bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-800/80")
                   }
                 >
-                  <span className="truncate">
-                    <span className="text-zinc-500 mr-2">{i + 1}.</span>
-                    {p.name}
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-zinc-500 w-5 text-right shrink-0">
+                      {i + 1}.
+                    </span>
+                    <Avatar
+                      emoji={p.avatar_emoji}
+                      color={p.avatar_color}
+                      name={p.name}
+                      size="sm"
+                    />
+                    <span className="truncate">{p.name}</span>
                   </span>
                   <span className="flex items-center gap-3 shrink-0">
                     {p.rejoin_code && (
@@ -1545,7 +1713,7 @@ function ScoreboardPanel({
                         {p.rejoin_code}
                       </span>
                     )}
-                    <span className="font-mono font-semibold">
+                    <span className="font-mono font-semibold w-12 text-right tabular-nums">
                       {scores[p.id] ?? 0}
                     </span>
                   </span>
@@ -1573,6 +1741,12 @@ function ScoreboardPanel({
                         );
                       })
                     )}
+                    <BonusPointsRow
+                      playerId={p.id}
+                      bonusTotal={bonusByPlayer[p.id] ?? 0}
+                      roomCode={roomCode}
+                      call={call}
+                    />
                   </div>
                 )}
               </li>
@@ -1661,6 +1835,184 @@ function PlayerAnswerRow({
       <span className="text-zinc-500 w-12 text-right">
         / {question.points}
       </span>
+    </div>
+  );
+}
+
+function RoundHeader({
+  name,
+  questionIds,
+  roomCode,
+  call,
+}: {
+  name: string;
+  questionIds: string[];
+  roomCode: string;
+  call: (path: string, body: unknown) => Promise<unknown>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const newName = draft.trim();
+      // Update every question in this group to the new round_name.
+      // Empty string clears (so "Uten runde" becomes named, or a named
+      // round can be reset to no-round).
+      await Promise.all(
+        questionIds.map((id) =>
+          call(`/api/rooms/${roomCode}/questions/edit`, {
+            id,
+            round_name: newName || null,
+          }),
+        ),
+      );
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Klarte ikke å lagre");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 mt-2">
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          maxLength={80}
+          placeholder="Rundenavn (tomt = ingen)"
+          className="flex-1 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-2 py-1 text-xs"
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={save}
+          className="text-xs rounded accent-bg disabled:opacity-60 px-2 py-1"
+        >
+          {busy ? "…" : "Lagre"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setDraft(name);
+            setEditing(false);
+          }}
+          className="text-xs rounded bg-zinc-200 dark:bg-zinc-800 px-2 py-1"
+        >
+          Avbryt
+        </button>
+        {error && <span className="text-xs text-red-500">{error}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(name);
+        setEditing(true);
+      }}
+      className="group flex items-center gap-2 text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 mt-2"
+      title="Klikk for å endre rundenavn for alle spørsmålene under"
+    >
+      <span>{name || "Uten runde"}</span>
+      <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+        ✎
+      </span>
+    </button>
+  );
+}
+
+function BonusPointsRow({
+  playerId,
+  bonusTotal,
+  roomCode,
+  call,
+}: {
+  playerId: string;
+  bonusTotal: number;
+  roomCode: string;
+  call: (path: string, body: unknown) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [points, setPoints] = useState("1");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    const n = parseFloat(points);
+    if (!Number.isFinite(n) || n === 0) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await call(`/api/rooms/${roomCode}/bonus`, {
+        player_id: playerId,
+        points: n,
+        reason: reason.trim() || null,
+      });
+      setReason("");
+      setPoints("1");
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Klarte ikke å gi bonus");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="text-xs py-1 space-y-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full hover:opacity-80"
+      >
+        <span className="text-zinc-500">+ Bonus</span>
+        <span className="font-mono text-zinc-500">
+          {bonusTotal !== 0 ? (bonusTotal > 0 ? `+${bonusTotal}` : bonusTotal) : "—"}
+        </span>
+      </button>
+      {open && (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            step={0.5}
+            value={points}
+            onChange={(e) => setPoints(e.target.value)}
+            className="w-16 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+          />
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="grunn (valgfritt)"
+            className="flex-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-2 py-0.5 text-xs"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={add}
+            className="rounded accent-bg disabled:opacity-60 px-2 py-0.5 text-xs"
+          >
+            Gi
+          </button>
+        </div>
+      )}
+      {error && <p className="text-red-500">{error}</p>}
     </div>
   );
 }

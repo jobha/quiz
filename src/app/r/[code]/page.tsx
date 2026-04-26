@@ -8,9 +8,34 @@ import type { Answer, Player, Question, Room } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Confetti } from "@/components/Confetti";
 import { AudioClue } from "@/components/AudioClue";
+import { Avatar } from "@/components/Avatar";
+import { Podium } from "@/components/Podium";
+import { ReactionsBar } from "@/components/ReactionsBar";
+import { ReactionsLayer } from "@/components/ReactionsLayer";
+import {
+  useReactionSender,
+  useReactionReceiver,
+} from "@/lib/reactions";
 import { useTypingBroadcast } from "@/lib/typing-presence";
 
 type Params = { code: string };
+
+const AVATAR_EMOJIS = [
+  "🦊", "🐼", "🐱", "🐶", "🐯", "🦁", "🐨", "🐵",
+  "🐸", "🐙", "🦄", "🐙", "🐢", "🐳", "🦋", "🌸",
+  "🍕", "🍔", "🍩", "🚀", "⚡", "🎸", "🎩", "👑",
+];
+const AVATAR_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444",
+  "#ec4899", "#8b5cf6", "#06b6d4", "#84cc16",
+];
+
+function randomEmoji() {
+  return AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
+}
+function randomColor() {
+  return AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+}
 
 export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const { code: rawCode } = use(params);
@@ -22,6 +47,8 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
 
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [pickedEmoji, setPickedEmoji] = useState<string>(() => randomEmoji());
+  const [pickedColor, setPickedColor] = useState<string>(() => randomColor());
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -31,6 +58,12 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const [myAnswers, setMyAnswers] = useState<Record<string, Answer>>({});
   const [allAnswers, setAllAnswers] = useState<Answer[]>([]);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
+
+  // Hooks below this line must run on every render — keep them
+  // unconditional and above the early returns.
+  const { sendReaction } = useReactionSender(code);
+  const { reactions } = useReactionReceiver(code);
 
   const storageKey = `quiz:player:${code}`;
 
@@ -91,6 +124,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         (payload) => {
           if (payload.eventType === "INSERT") {
             setPlayers((prev) => [...prev, payload.new as Player]);
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Player;
+            setPlayers((prev) =>
+              prev.map((p) => (p.id === updated.id ? updated : p)),
+            );
           } else if (payload.eventType === "DELETE") {
             const removed = payload.old as { id: string };
             setPlayers((prev) => prev.filter((p) => p.id !== removed.id));
@@ -105,23 +143,31 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [code]);
 
-  // For the player-facing scoreboard: load all answers and stay in sync.
-  // Cheap because the room is small.
+  // For the player-facing scoreboard: load all answers + bonus and stay
+  // in sync. Cheap because the room is small.
   useEffect(() => {
-    if (!room?.show_scoreboard) {
+    if (!room?.show_scoreboard && !room?.show_own_score && room?.phase !== "ended") {
       setAllAnswers([]);
+      setBonusByPlayer({});
       return;
     }
     const sb = supabaseBrowser();
     let cancelled = false;
 
     async function load() {
-      const { data: ans } = await sb
-        .from("answers")
-        .select("*")
-        .eq("room_code", code);
+      const [{ data: ans }, { data: bonus }] = await Promise.all([
+        sb.from("answers").select("*").eq("room_code", code),
+        sb.from("bonus_points").select("player_id, points").eq("room_code", code),
+      ]);
       if (cancelled) return;
       if (ans) setAllAnswers(ans as Answer[]);
+      if (bonus) {
+        const map: Record<string, number> = {};
+        for (const b of bonus as { player_id: string; points: number }[]) {
+          map[b.player_id] = (map[b.player_id] ?? 0) + b.points;
+        }
+        setBonusByPlayer(map);
+      }
     }
     load();
 
@@ -148,13 +194,31 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "bonus_points", filter: `room_code=eq.${code}` },
+        () => {
+          // Reload aggregate on any change (rare, easier than diffing).
+          sb.from("bonus_points")
+            .select("player_id, points")
+            .eq("room_code", code)
+            .then(({ data }) => {
+              if (!data) return;
+              const map: Record<string, number> = {};
+              for (const b of data as { player_id: string; points: number }[]) {
+                map[b.player_id] = (map[b.player_id] ?? 0) + b.points;
+              }
+              setBonusByPlayer(map);
+            });
+        },
+      )
       .subscribe();
 
     return () => {
       cancelled = true;
       sb.removeChannel(channel);
     };
-  }, [code, room?.show_scoreboard]);
+  }, [code, room?.show_scoreboard, room?.show_own_score, room?.phase]);
 
   // Load all questions for history view, when enabled.
   useEffect(() => {
@@ -302,7 +366,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       const res = await fetch(`/api/rooms/${code}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({
+          name: trimmed,
+          avatar_emoji: pickedEmoji,
+          avatar_color: pickedColor,
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as { player_id: string };
@@ -326,8 +394,10 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     for (const a of Object.values(myAnswers)) {
       if (typeof a.points_awarded === "number") s += a.points_awarded;
     }
+    if (playerId && bonusByPlayer[playerId])
+      s += bonusByPlayer[playerId];
     return s;
-  }, [myAnswers]);
+  }, [myAnswers, bonusByPlayer, playerId]);
 
   const allScores = useMemo(() => {
     const out: Record<string, number> = {};
@@ -337,8 +407,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         out[a.player_id] = (out[a.player_id] ?? 0) + a.points_awarded;
       }
     }
+    for (const [pid, bonus] of Object.entries(bonusByPlayer)) {
+      out[pid] = (out[pid] ?? 0) + bonus;
+    }
     return out;
-  }, [allAnswers, players]);
+  }, [allAnswers, players, bonusByPlayer]);
 
   if (!room) {
     return (
@@ -370,10 +443,66 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
               maxLength={40}
               className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500"
             />
+
+            <div className="flex items-center gap-3">
+              <Avatar
+                emoji={pickedEmoji}
+                color={pickedColor}
+                name={name || "?"}
+                size="lg"
+              />
+              <div className="flex-1 text-xs text-zinc-500">
+                Velg en figur og en farge nedenfor – den følger deg gjennom
+                quizen.
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-zinc-500 mb-1">Figur</p>
+              <div className="grid grid-cols-8 gap-1">
+                {AVATAR_EMOJIS.map((e, i) => (
+                  <button
+                    key={`${e}-${i}`}
+                    type="button"
+                    onClick={() => setPickedEmoji(e)}
+                    className={
+                      "h-9 rounded-md text-xl transition " +
+                      (pickedEmoji === e
+                        ? "bg-zinc-200 dark:bg-zinc-800 ring-2 ring-offset-1 dark:ring-offset-zinc-900"
+                        : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                    }
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-zinc-500 mb-1">Farge</p>
+              <div className="flex gap-2">
+                {AVATAR_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setPickedColor(c)}
+                    className={
+                      "w-7 h-7 rounded-full border-2 transition " +
+                      (pickedColor === c
+                        ? "border-zinc-900 dark:border-zinc-100 scale-110"
+                        : "border-zinc-300 dark:border-zinc-700 hover:scale-105")
+                    }
+                    style={{ backgroundColor: c }}
+                    aria-label={`Sett farge ${c}`}
+                  />
+                ))}
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={joining || !name.trim()}
-              className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium"
+              className="w-full rounded-lg accent-bg disabled:opacity-60 px-4 py-3 font-medium"
             >
               {joining ? "Blir med…" : "Bli med"}
             </button>
@@ -386,9 +515,19 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     );
   }
 
-  const accentStyle = room.accent_color
+  const accentStyle = room?.accent_color
     ? ({ ["--accent" as never]: room.accent_color } as React.CSSProperties)
     : undefined;
+  const spotlightAnswer = room?.spotlight_answer_id
+    ? allAnswers.find((a) => a.id === room.spotlight_answer_id)
+    : null;
+  const spotlightPlayer = spotlightAnswer
+    ? players.find((p) => p.id === spotlightAnswer.player_id)
+    : null;
+  const spotlightQuestion = spotlightAnswer
+    ? allQuestions.find((q) => q.id === spotlightAnswer.question_id) ??
+      (question?.id === spotlightAnswer.question_id ? question : null)
+    : null;
   return (
     <main
       className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6"
@@ -404,6 +543,14 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         />
       )}
       {!previewMode && <Confetti trigger={room.phase === "ended"} />}
+      {!previewMode && <ReactionsLayer reactions={reactions} />}
+      {!previewMode && spotlightAnswer && spotlightPlayer && (
+        <SpotlightOverlay
+          answer={spotlightAnswer}
+          player={spotlightPlayer}
+          question={spotlightQuestion ?? null}
+        />
+      )}
       {!previewMode && (
         <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       )}
@@ -413,21 +560,31 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         </div>
       )}
       <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-widest">
-            Rom {code}
-          </p>
-          <p className="text-lg font-semibold">
-            {previewMode ? "Eksempel-spiller" : me!.name}
-          </p>
-          {!previewMode && me!.rejoin_code && (
-            <p className="text-xs text-zinc-500 mt-1">
-              Din kode for å fortsette:{" "}
-              <span className="font-mono tracking-widest text-zinc-700 dark:text-zinc-300">
-                {me!.rejoin_code}
-              </span>
-            </p>
+        <div className="flex items-center gap-3">
+          {!previewMode && me && (
+            <Avatar
+              emoji={me.avatar_emoji}
+              color={me.avatar_color}
+              name={me.name}
+              size="lg"
+            />
           )}
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest">
+              Rom {code}
+            </p>
+            <p className="text-lg font-semibold">
+              {previewMode ? "Eksempel-spiller" : me!.name}
+            </p>
+            {!previewMode && me!.rejoin_code && (
+              <p className="text-xs text-zinc-500 mt-1">
+                Din kode for å fortsette:{" "}
+                <span className="font-mono tracking-widest text-zinc-700 dark:text-zinc-300">
+                  {me!.rejoin_code}
+                </span>
+              </p>
+            )}
+          </div>
         </div>
         {room.show_own_score && !previewMode && (
           <div className="text-right">
@@ -448,7 +605,16 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         playerId={playerId ?? "preview"}
         code={code}
         previewMode={previewMode}
+        players={players}
+        scores={allScores}
       />
+
+      {!previewMode && (
+        <ReactionsBar
+          onReact={(emoji) => sendReaction(emoji)}
+          disabled={room.phase === "ended"}
+        />
+      )}
 
       {room.show_history && (
         <HistoryPanel
@@ -482,7 +648,15 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
                     : "bg-zinc-50 dark:bg-zinc-950")
                 }
               >
-                <span className="truncate">{p.name}</span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <Avatar
+                    emoji={p.avatar_emoji}
+                    color={p.avatar_color}
+                    name={p.name}
+                    size="sm"
+                  />
+                  <span className="truncate">{p.name}</span>
+                </span>
                 {!room.hide_rejoin_codes && p.rejoin_code && (
                   <span className="font-mono text-xs tracking-widest text-zinc-500 shrink-0">
                     {p.rejoin_code}
@@ -531,9 +705,15 @@ function ScoreboardForPlayers({
                 : "bg-zinc-50 dark:bg-zinc-950")
             }
           >
-            <span className="truncate">
-              <span className="text-zinc-500 mr-2">{i + 1}.</span>
-              {p.name}
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="text-zinc-500 w-5 text-right">{i + 1}.</span>
+              <Avatar
+                emoji={p.avatar_emoji}
+                color={p.avatar_color}
+                name={p.name}
+                size="sm"
+              />
+              <span className="truncate">{p.name}</span>
             </span>
             <span className="flex items-center gap-3 shrink-0">
               {!hideCodes && p.rejoin_code && (
@@ -559,6 +739,8 @@ function PlayerStage({
   playerId,
   code,
   previewMode,
+  players,
+  scores,
 }: {
   room: Room;
   question: Question | null;
@@ -566,6 +748,8 @@ function PlayerStage({
   playerId: string;
   code: string;
   previewMode: boolean;
+  players: Player[];
+  scores: Record<string, number>;
 }) {
   if (room.phase === "lobby") {
     return (
@@ -575,12 +759,7 @@ function PlayerStage({
     );
   }
   if (room.phase === "ended") {
-    return (
-      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
-        <p className="text-lg font-semibold">Quizen er ferdig!</p>
-        <p className="text-zinc-600 dark:text-zinc-400 text-sm mt-1">Takk for at du spilte.</p>
-      </div>
-    );
+    return <Podium players={players} scores={scores} />;
   }
   if (!question) {
     return (
@@ -667,9 +846,16 @@ function QuestionView({
   return (
     <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5">
       <div>
-        <p className="text-xs uppercase tracking-widest text-zinc-500">
-          Spørsmål #{question.position}
-        </p>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-xs uppercase tracking-widest text-zinc-500">
+            Spørsmål #{question.position}
+          </p>
+          {question.round_name && (
+            <span className="text-xs uppercase tracking-widest accent-text font-semibold">
+              {question.round_name}
+            </span>
+          )}
+        </div>
         <h2 className="text-2xl font-semibold mt-1">{question.prompt}</h2>
         {question.image_url && (
           <img
@@ -919,6 +1105,41 @@ function ResultLine({
     <p className="result-line text-sm mt-2 text-amber-600 dark:text-amber-300">
       Delvis riktig! +{pa}
     </p>
+  );
+}
+
+function SpotlightOverlay({
+  answer,
+  player,
+  question,
+}: {
+  answer: Answer;
+  player: Player;
+  question: Question | null;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="fixed inset-0 z-40 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm pointer-events-none animate-[spotlight_300ms_ease-out]"
+    >
+      <div className="rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 max-w-xl w-full text-center space-y-6 shadow-2xl">
+        {question && (
+          <p className="text-xs uppercase tracking-widest text-zinc-500">
+            {question.prompt}
+          </p>
+        )}
+        <div className="flex flex-col items-center gap-3">
+          <Avatar
+            emoji={player.avatar_emoji}
+            color={player.avatar_color}
+            name={player.name}
+            size="xl"
+          />
+          <p className="text-xl font-semibold">{player.name}</p>
+        </div>
+        <p className="text-3xl font-bold break-words">{answer.answer}</p>
+      </div>
+    </div>
   );
 }
 

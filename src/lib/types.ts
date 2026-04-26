@@ -10,6 +10,7 @@ export type Room = {
   show_history: boolean;
   hide_rejoin_codes: boolean;
   accent_color: string | null;
+  spotlight_answer_id: string | null;
   created_at: string;
 };
 
@@ -27,6 +28,7 @@ export type Question = {
   image_url: string | null;
   audio_url: string | null;
   revealed: boolean;
+  round_name: string | null;
   created_at: string;
 };
 
@@ -35,6 +37,17 @@ export type Player = {
   room_code: string;
   name: string;
   rejoin_code: string | null;
+  avatar_emoji: string | null;
+  avatar_color: string | null;
+  created_at: string;
+};
+
+export type BonusPoints = {
+  id: string;
+  room_code: string;
+  player_id: string;
+  points: number;
+  reason: string | null;
   created_at: string;
 };
 
