@@ -26,6 +26,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [myAnswers, setMyAnswers] = useState<Record<string, Answer>>({});
   const [allAnswers, setAllAnswers] = useState<Answer[]>([]);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
 
   const storageKey = `quiz:player:${code}`;
 
@@ -49,7 +50,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       const { data: roomData } = await sb
         .from("rooms")
         .select(
-          "code, phase, current_question_id, show_scoreboard, show_own_score, created_at",
+          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, created_at",
         )
         .eq("code", code)
         .maybeSingle();
@@ -150,6 +151,59 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       sb.removeChannel(channel);
     };
   }, [code, room?.show_scoreboard]);
+
+  // Load all questions for history view, when enabled.
+  useEffect(() => {
+    if (!room?.show_history) {
+      setAllQuestions([]);
+      return;
+    }
+    const sb = supabaseBrowser();
+    let cancelled = false;
+    async function load() {
+      const { data } = await sb
+        .from("questions")
+        .select("*")
+        .eq("room_code", code)
+        .order("position");
+      if (!cancelled && data) setAllQuestions(data as Question[]);
+    }
+    load();
+    const channel = sb
+      .channel(`history:${code}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "questions", filter: `room_code=eq.${code}` },
+        (payload) => {
+          setAllQuestions((prev) => {
+            if (payload.eventType === "INSERT") {
+              return [...prev, payload.new as Question].sort(
+                (a, b) => a.position - b.position,
+              );
+            }
+            if (payload.eventType === "UPDATE") {
+              return prev
+                .map((q) =>
+                  q.id === (payload.new as Question).id
+                    ? (payload.new as Question)
+                    : q,
+                )
+                .sort((a, b) => a.position - b.position);
+            }
+            if (payload.eventType === "DELETE") {
+              const removed = payload.old as { id: string };
+              return prev.filter((q) => q.id !== removed.id);
+            }
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      sb.removeChannel(channel);
+    };
+  }, [code, room?.show_history]);
 
   // Load current question whenever it changes.
   useEffect(() => {
@@ -342,6 +396,15 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         playerId={playerId}
         code={code}
       />
+
+      {room.show_history && (
+        <HistoryPanel
+          questions={allQuestions}
+          currentQuestionId={room.current_question_id}
+          myAnswers={myAnswers}
+          showOwnScore={room.show_own_score}
+        />
+      )}
 
       {room.show_scoreboard ? (
         <ScoreboardForPlayers
@@ -621,6 +684,87 @@ function QuestionView({
       )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}
+    </section>
+  );
+}
+
+function HistoryPanel({
+  questions,
+  currentQuestionId,
+  myAnswers,
+  showOwnScore,
+}: {
+  questions: Question[];
+  currentQuestionId: string | null;
+  myAnswers: Record<string, Answer>;
+  showOwnScore: boolean;
+}) {
+  const currentIdx = currentQuestionId
+    ? questions.findIndex((q) => q.id === currentQuestionId)
+    : -1;
+  const visible =
+    currentIdx >= 0 ? questions.slice(0, currentIdx + 1) : questions;
+  if (visible.length === 0) return null;
+  return (
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+      <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+        Spørsmål så langt
+      </h2>
+      <ol className="space-y-2">
+        {visible.map((q, i) => {
+          const a = myAnswers[q.id];
+          const pa = a?.points_awarded;
+          const status =
+            pa === undefined || pa === null
+              ? "pending"
+              : pa === 0
+              ? "wrong"
+              : pa === q.points
+              ? "right"
+              : "partial";
+          return (
+            <li
+              key={q.id}
+              className="rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 text-sm space-y-1"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span>
+                  <span className="text-zinc-500 mr-2">{i + 1}.</span>
+                  {q.prompt}
+                </span>
+                {showOwnScore && a && (
+                  <span
+                    className={
+                      "font-mono text-xs shrink-0 " +
+                      (status === "right"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : status === "wrong"
+                        ? "text-red-500 dark:text-red-400"
+                        : status === "partial"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-zinc-500")
+                    }
+                  >
+                    {status === "pending" ? "–" : `+${pa}`}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                {a ? (
+                  <>
+                    Ditt svar:{" "}
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                      {a.answer}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-zinc-500 italic">Ingen svar</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

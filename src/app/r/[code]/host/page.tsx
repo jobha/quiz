@@ -57,7 +57,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           sb
             .from("rooms")
             .select(
-              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, created_at",
+              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, created_at",
             )
             .eq("code", code)
             .maybeSingle(),
@@ -810,10 +810,10 @@ function QuestionListPanel({
                     setBusy(null);
                   }
                 }}
-                className="text-xs px-1 text-zinc-500 hover:text-red-400"
+                className="text-xs px-1 text-zinc-600 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30"
                 title="Slett spørsmål"
               >
-                🗑
+                ✗
               </button>
             </li>
           );
@@ -1039,7 +1039,10 @@ function ScoreboardPanel({
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
   );
 
-  async function setFlag(field: "show_scoreboard" | "show_own_score", value: boolean) {
+  async function setFlag(
+    field: "show_scoreboard" | "show_own_score" | "show_history",
+    value: boolean,
+  ) {
     setBusy(true);
     try {
       await call(`/api/rooms/${room.code}/state`, { [field]: value });
@@ -1073,6 +1076,17 @@ function ScoreboardPanel({
           checked={room.show_own_score}
           disabled={busy}
           onChange={(v) => setFlag("show_own_score", v)}
+        />
+        <SwitchRow
+          label="Vis historikk"
+          subtitle={
+            room.show_history
+              ? "Spillerne ser tidligere spørsmål, sine svar og poeng"
+              : "Spillerne ser kun det aktive spørsmålet"
+          }
+          checked={room.show_history}
+          disabled={busy}
+          onChange={(v) => setFlag("show_history", v)}
         />
       </div>
       {players.length === 0 ? (

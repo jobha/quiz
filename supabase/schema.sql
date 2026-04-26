@@ -100,3 +100,11 @@ alter publication supabase_realtime add table rooms;
 alter publication supabase_realtime add table questions;
 alter publication supabase_realtime add table players;
 alter publication supabase_realtime add table answers;
+
+-- REPLICA IDENTITY FULL means DELETE events include every column on the
+-- old row — without this, postgres_changes filters like "room_code=eq.X"
+-- can't see the room_code on DELETEs and silently drop them.
+alter table rooms     replica identity full;
+alter table questions replica identity full;
+alter table players   replica identity full;
+alter table answers   replica identity full;

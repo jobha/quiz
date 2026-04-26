@@ -7,6 +7,7 @@ export type Room = {
   current_question_id: string | null;
   show_scoreboard: boolean;
   show_own_score: boolean;
+  show_history: boolean;
   created_at: string;
 };
 
