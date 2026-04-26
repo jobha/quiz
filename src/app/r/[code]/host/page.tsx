@@ -262,10 +262,13 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             </p>
           )}
         </div>
-        <div className="text-right text-xs text-zinc-500">
-          <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
-          <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
-          <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
+        <div className="flex flex-col items-end gap-3">
+          <ThemeToggle />
+          <div className="text-right text-xs text-zinc-500">
+            <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
+            <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
+            <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
+          </div>
         </div>
       </header>
 
