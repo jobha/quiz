@@ -968,7 +968,7 @@ function QuestionListRow({
               : "Ikke startet"
           }
         >
-          {q.revealed ? "✓" : answerCount > 0 ? "⏳" : ""}
+          {q.revealed ? "✓" : answerCount > 0 ? "…" : ""}
         </span>
         <span className="text-xs text-zinc-500 shrink-0 mr-1">
           {typeLabel} · {q.points}p
