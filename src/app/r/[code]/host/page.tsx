@@ -235,11 +235,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     : `/r/${code}`;
 
   return (
-    <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <header className="flex items-start justify-between gap-4 flex-wrap pr-32">
+    <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6">
+      <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Quizmaster for rom
@@ -601,7 +598,7 @@ function AnswerRow({
 
   const fullChosen = answer.points_awarded === maxPoints;
   const zeroChosen = answer.points_awarded === 0;
-  const half = Math.floor(maxPoints / 2);
+  const half = maxPoints / 2;
   const halfChosen =
     answer.points_awarded === half &&
     answer.points_awarded !== null &&
@@ -659,18 +656,19 @@ function AnswerRow({
         <input
           type="number"
           min={0}
-          max={maxPoints}
+          step={0.5}
           value={pointsInput}
           onChange={(e) => setPointsInput(e.target.value)}
           onBlur={() => {
-            const n = parseInt(pointsInput, 10);
+            const n = parseFloat(pointsInput);
             if (Number.isFinite(n) && n !== answer.points_awarded) {
-              award(Math.max(0, Math.min(maxPoints, n)));
+              award(Math.max(0, Math.min(999, n)));
             }
           }}
           disabled={busy}
-          className="w-12 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+          className="w-14 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
           placeholder="–"
+          title="Du kan gi ethvert antall poeng – også over spørsmålets standardverdi"
         />
       </div>
     </li>
@@ -736,7 +734,7 @@ function QuestionListPanel({
               key={q.id}
               className={
                 "flex items-center gap-1 rounded px-1 py-1 text-sm " +
-                (isCurrent ? "bg-indigo-500/15 text-indigo-200" : "")
+                (isCurrent ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200" : "")
               }
             >
               <button
@@ -752,7 +750,7 @@ function QuestionListPanel({
                     setBusy(null);
                   }
                 }}
-                className="flex-1 text-left truncate hover:text-indigo-200 disabled:opacity-60 px-1"
+                className="flex-1 text-left truncate hover:text-indigo-700 dark:hover:text-indigo-200 disabled:opacity-60 px-1"
               >
                 <span className="text-zinc-500 mr-2">{i + 1}.</span>
                 {q.prompt}
@@ -912,7 +910,7 @@ function AddQuestionPanel({
             className={
               "flex-1 rounded-lg px-3 py-2 text-sm border " +
               (type === "text"
-                ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
+                ? "bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-100"
                 : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
             }
           >
@@ -924,7 +922,7 @@ function AddQuestionPanel({
             className={
               "flex-1 rounded-lg px-3 py-2 text-sm border " +
               (type === "choice"
-                ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
+                ? "bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-100"
                 : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
             }
           >
@@ -983,11 +981,12 @@ function AddQuestionPanel({
           <label className="text-sm text-zinc-600 dark:text-zinc-400">Poeng</label>
           <input
             type="number"
-            min={1}
-            max={10}
+            min={0.5}
+            max={100}
+            step={0.5}
             value={points}
             onChange={(e) => setPoints(Number(e.target.value))}
-            className="w-20 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
+            className="w-24 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           />
         </div>
 

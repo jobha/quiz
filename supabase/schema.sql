@@ -27,7 +27,7 @@ create table if not exists questions (
   prompt          text not null,
   choices         jsonb,                            -- array of strings, null for text
   correct_answer  text not null,                    -- canonical correct answer
-  points          int  not null default 1,
+  points          double precision not null default 1, -- fractional allowed
   image_url       text,                             -- optional uploaded image
   created_at      timestamptz not null default now()
 );
@@ -61,11 +61,11 @@ create table if not exists answers (
   player_id       uuid not null references players(id) on delete cascade,
   answer          text not null,
   is_correct      boolean,                          -- legacy, derived from points_awarded
-  points_awarded  int,                              -- null = not yet judged, 0 = wrong
+  points_awarded  double precision,                 -- null = not yet judged, 0 = wrong, fractional allowed
   submitted_at    timestamptz not null default now(),
   unique (question_id, player_id)
 );
-alter table answers add column if not exists points_awarded int;
+alter table answers add column if not exists points_awarded double precision;
 create index if not exists answers_question_idx on answers(question_id);
 
 -- RLS --------------------------------------------------------------------

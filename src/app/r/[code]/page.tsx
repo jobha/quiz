@@ -308,11 +308,8 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
-      <header className="flex items-start justify-between gap-4 flex-wrap pr-32">
+    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
+      <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Rom {code}
@@ -327,12 +324,17 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
             </p>
           )}
         </div>
-        {room.show_own_score && (
-          <div className="text-right">
-            <p className="text-xs text-zinc-500 uppercase tracking-widest">Poeng</p>
-            <p className="text-2xl font-bold">{myScore}</p>
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-2">
+          <ThemeToggle />
+          {room.show_own_score && (
+            <div className="text-right">
+              <p className="text-xs text-zinc-500 uppercase tracking-widest">
+                Poeng
+              </p>
+              <p className="text-2xl font-bold leading-none">{myScore}</p>
+            </div>
+          )}
+        </div>
       </header>
 
       <PlayerStage
@@ -361,7 +363,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
                 className={
                   "flex items-center justify-between rounded-md px-3 py-2 text-sm gap-2 " +
                   (p.id === playerId
-                    ? "bg-indigo-500/20 text-indigo-200"
+                    ? "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
                     : "bg-zinc-50 dark:bg-zinc-950")
                 }
               >
@@ -406,7 +408,7 @@ function ScoreboardForPlayers({
             className={
               "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
               (p.id === myId
-                ? "bg-indigo-500/20 text-indigo-100"
+                ? "bg-indigo-500/20 text-indigo-700 dark:text-indigo-100"
                 : "bg-zinc-50 dark:bg-zinc-950")
             }
           >
@@ -560,9 +562,9 @@ function QuestionView({
                 className={
                   "rounded-lg px-4 py-3 text-left border transition " +
                   (isRight
-                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-100"
+                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-100"
                     : isWrongPick
-                    ? "bg-red-500/20 border-red-500 text-red-100"
+                    ? "bg-red-500/20 border-red-500 text-red-700 dark:text-red-100"
                     : chosen
                     ? "bg-indigo-500/20 border-indigo-500"
                     : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 disabled:opacity-60")

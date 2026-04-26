@@ -27,7 +27,7 @@ export async function POST(
   const prompt = body?.prompt?.trim();
   const correct = body?.correct_answer?.trim();
   const points = Number.isFinite(body?.points)
-    ? Math.max(1, Math.min(20, body!.points!))
+    ? Math.max(0.5, Math.min(100, body!.points!))
     : 1;
   const imageUrl =
     typeof body?.image_url === "string" && body.image_url.trim()

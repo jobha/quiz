@@ -40,13 +40,16 @@ export async function POST(
   if (!question) {
     return new NextResponse("Fant ikke spørsmålet", { status: 404 });
   }
-  const max = question.points as number;
+  const defaultPoints = question.points as number;
 
+  // Host has full discretion: award any non-negative number (halves OK)
+  // up to a sane ceiling — defends against runaway inputs.
+  const HARD_CAP = 999;
   let pointsAwarded: number;
   if (typeof body.points_awarded === "number" && Number.isFinite(body.points_awarded)) {
-    pointsAwarded = Math.max(0, Math.min(max, Math.round(body.points_awarded)));
+    pointsAwarded = Math.max(0, Math.min(HARD_CAP, body.points_awarded));
   } else if (typeof body.is_correct === "boolean") {
-    pointsAwarded = body.is_correct ? max : 0;
+    pointsAwarded = body.is_correct ? defaultPoints : 0;
   } else {
     return new NextResponse("Mangler felter", { status: 400 });
   }
