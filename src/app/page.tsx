@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { normalizeRoomCode } from "@/lib/room-code";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Home() {
   const router = useRouter();
@@ -36,26 +37,25 @@ export default function Home() {
 
   async function resume(e: React.FormEvent) {
     e.preventDefault();
-    const room = normalizeRoomCode(code);
     const rc = normalizeRoomCode(rejoinCode);
-    if (!room || !rc) return;
+    if (!rc) return;
     setResuming(true);
     setError(null);
     try {
-      const res = await fetch(`/api/rooms/${room}/resume`, {
+      const res = await fetch(`/api/resume`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: rc }),
       });
       if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as
-        | { type: "player"; player_id: string }
-        | { type: "host"; host_secret: string };
+        | { type: "player"; room_code: string; player_id: string }
+        | { type: "host"; room_code: string; host_secret: string };
       if (json.type === "host") {
-        router.push(`/r/${room}/host?k=${json.host_secret}`);
+        router.push(`/r/${json.room_code}/host?k=${json.host_secret}`);
       } else {
-        localStorage.setItem(`quiz:player:${room}`, json.player_id);
-        router.push(`/r/${room}?p=${json.player_id}`);
+        localStorage.setItem(`quiz:player:${json.room_code}`, json.player_id);
+        router.push(`/r/${json.room_code}?p=${json.player_id}`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Kunne ikke fortsette");
@@ -65,25 +65,28 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
+    <main className="min-h-screen flex items-center justify-center p-6 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md space-y-6">
         <header className="text-center space-y-2">
           <h1 className="text-4xl font-bold">Quiz</h1>
-          <p className="text-zinc-400">FaceTime-quiz med venner, helt enkelt.</p>
+          <p className="text-zinc-600 dark:text-zinc-400">FaceTime-quiz med venner, helt enkelt.</p>
         </header>
 
-        <section className="rounded-2xl bg-zinc-900 p-6 space-y-4 border border-zinc-800">
+        <section className="rounded-2xl bg-white dark:bg-zinc-900 p-6 space-y-4 border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-lg font-semibold">Vær quizmaster</h2>
           <button
             onClick={createRoom}
             disabled={creating}
-            className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium"
+            className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium text-white"
           >
             {creating ? "Lager…" : "Lag rom"}
           </button>
         </section>
 
-        <section className="rounded-2xl bg-zinc-900 p-6 space-y-4 border border-zinc-800">
+        <section className="rounded-2xl bg-white dark:bg-zinc-900 p-6 space-y-4 border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-lg font-semibold">Bli med i en quiz</h2>
           <form onSubmit={joinRoom} className="space-y-3">
             <input
@@ -93,33 +96,24 @@ export default function Home() {
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="ROMKODE"
-              className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 tracking-[0.3em] text-center font-mono text-lg outline-none focus:border-indigo-500"
+              className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 tracking-[0.3em] text-center font-mono text-lg outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
               disabled={!normalizeRoomCode(code)}
-              className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-4 py-3 font-medium"
+              className="w-full rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-4 py-3 font-medium"
             >
               Bli med
             </button>
           </form>
         </section>
 
-        <section className="rounded-2xl bg-zinc-900 p-6 space-y-4 border border-zinc-800">
+        <section className="rounded-2xl bg-white dark:bg-zinc-900 p-6 space-y-4 border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-lg font-semibold">Fortsett med en kode</h2>
           <p className="text-xs text-zinc-500">
-            Skriv romkoden og din personlige kode (spiller eller quizmaster).
+            Skriv din personlige kode (spiller eller quizmaster) – vi finner riktig rom for deg.
           </p>
           <form onSubmit={resume} className="space-y-3">
-            <input
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="ROMKODE"
-              className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 tracking-[0.3em] text-center font-mono text-lg outline-none focus:border-indigo-500"
-            />
             <input
               autoCapitalize="characters"
               autoCorrect="off"
@@ -127,19 +121,19 @@ export default function Home() {
               value={rejoinCode}
               onChange={(e) => setRejoinCode(e.target.value.toUpperCase())}
               placeholder="DIN KODE"
-              className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 tracking-[0.3em] text-center font-mono text-lg outline-none focus:border-indigo-500"
+              className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 tracking-[0.3em] text-center font-mono text-lg outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
-              disabled={resuming || !normalizeRoomCode(code) || !normalizeRoomCode(rejoinCode)}
-              className="w-full rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-4 py-3 font-medium"
+              disabled={resuming || !normalizeRoomCode(rejoinCode)}
+              className="w-full rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-4 py-3 font-medium"
             >
               {resuming ? "Fortsetter…" : "Fortsett"}
             </button>
           </form>
         </section>
 
-        {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+        {error && <p className="text-sm text-red-500 dark:text-red-400 text-center">{error}</p>}
       </div>
     </main>
   );

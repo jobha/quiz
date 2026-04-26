@@ -24,7 +24,7 @@ export async function POST(
 
   // Generate a unique 4-char rejoin code within this room.
   for (let i = 0; i < 10; i++) {
-    const rejoinCode = generateRoomCode(4);
+    const rejoinCode = generateRoomCode(6);
     const { data, error } = await sb
       .from("players")
       .insert({ room_code: code, name, rejoin_code: rejoinCode })

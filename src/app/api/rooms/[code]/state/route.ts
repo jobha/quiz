@@ -20,6 +20,7 @@ export async function POST(
     phase?: string;
     current_question_id?: string | null;
     show_scoreboard?: boolean;
+    show_own_score?: boolean;
   } | null;
 
   const update: Record<string, unknown> = {};
@@ -34,6 +35,9 @@ export async function POST(
   }
   if (body && typeof body.show_scoreboard === "boolean") {
     update.show_scoreboard = body.show_scoreboard;
+  }
+  if (body && typeof body.show_own_score === "boolean") {
+    update.show_own_score = body.show_own_score;
   }
   if (Object.keys(update).length === 0) {
     return new NextResponse("Nothing to update", { status: 400 });

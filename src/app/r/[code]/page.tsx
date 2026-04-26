@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeRoomCode } from "@/lib/room-code";
 import type { Answer, Player, Question, Room } from "@/lib/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type Params = { code: string };
 
@@ -47,7 +48,9 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     async function load() {
       const { data: roomData } = await sb
         .from("rooms")
-        .select("code, phase, current_question_id, created_at")
+        .select(
+          "code, phase, current_question_id, show_scoreboard, show_own_score, created_at",
+        )
         .eq("code", code)
         .maybeSingle();
       if (cancelled) return;
@@ -261,7 +264,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   if (!room) {
     return (
       <Centered>
-        <p className="text-zinc-400">Leter etter rom {code}…</p>
+        <p className="text-zinc-600 dark:text-zinc-400">Leter etter rom {code}…</p>
       </Centered>
     );
   }
@@ -271,22 +274,22 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       <Centered>
         <div className="w-full max-w-md space-y-6">
           <header className="text-center">
-            <p className="text-zinc-400 text-sm">Blir med i rom</p>
+            <p className="text-zinc-600 dark:text-zinc-400 text-sm">Blir med i rom</p>
             <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
               {code}
             </h1>
           </header>
           <form
             onSubmit={joinRoom}
-            className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4"
+            className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4"
           >
-            <label className="block text-sm text-zinc-400">Ditt navn</label>
+            <label className="block text-sm text-zinc-600 dark:text-zinc-400">Ditt navn</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="f.eks. Jonas"
               maxLength={40}
-              className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500"
+              className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500"
             />
             <button
               type="submit"
@@ -305,8 +308,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
-      <header className="flex items-start justify-between gap-4 flex-wrap">
+    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <header className="flex items-start justify-between gap-4 flex-wrap pr-32">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Rom {code}
@@ -315,16 +321,18 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           {me.rejoin_code && (
             <p className="text-xs text-zinc-500 mt-1">
               Din kode for å fortsette:{" "}
-              <span className="font-mono tracking-widest text-zinc-300">
+              <span className="font-mono tracking-widest text-zinc-700 dark:text-zinc-300">
                 {me.rejoin_code}
               </span>
             </p>
           )}
         </div>
-        <div className="text-right">
-          <p className="text-xs text-zinc-500 uppercase tracking-widest">Poeng</p>
-          <p className="text-2xl font-bold">{myScore}</p>
-        </div>
+        {room.show_own_score && (
+          <div className="text-right">
+            <p className="text-xs text-zinc-500 uppercase tracking-widest">Poeng</p>
+            <p className="text-2xl font-bold">{myScore}</p>
+          </div>
+        )}
       </header>
 
       <PlayerStage
@@ -342,8 +350,8 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           myId={playerId}
         />
       ) : (
-        <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
-          <h2 className="text-sm font-semibold text-zinc-400 mb-3">
+        <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
+          <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">
             Spillere ({players.length})
           </h2>
           <ul className="space-y-1">
@@ -354,7 +362,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
                   "flex items-center justify-between rounded-md px-3 py-2 text-sm gap-2 " +
                   (p.id === playerId
                     ? "bg-indigo-500/20 text-indigo-200"
-                    : "bg-zinc-950")
+                    : "bg-zinc-50 dark:bg-zinc-950")
                 }
               >
                 <span className="truncate">{p.name}</span>
@@ -389,8 +397,8 @@ function ScoreboardForPlayers({
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
   );
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
-      <h2 className="text-sm font-semibold text-zinc-400 mb-3">Poengtavle</h2>
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
+      <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 mb-3">Poengtavle</h2>
       <ol className="space-y-1">
         {sorted.map((p, i) => (
           <li
@@ -399,7 +407,7 @@ function ScoreboardForPlayers({
               "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
               (p.id === myId
                 ? "bg-indigo-500/20 text-indigo-100"
-                : "bg-zinc-950")
+                : "bg-zinc-50 dark:bg-zinc-950")
             }
           >
             <span className="truncate">
@@ -438,23 +446,23 @@ function PlayerStage({
 }) {
   if (room.phase === "lobby") {
     return (
-      <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
-        <p className="text-zinc-400">Venter på at quizmasteren starter…</p>
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
+        <p className="text-zinc-600 dark:text-zinc-400">Venter på at quizmasteren starter…</p>
       </div>
     );
   }
   if (room.phase === "ended") {
     return (
-      <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
         <p className="text-lg font-semibold">Quizen er ferdig!</p>
-        <p className="text-zinc-400 text-sm mt-1">Takk for at du spilte.</p>
+        <p className="text-zinc-600 dark:text-zinc-400 text-sm mt-1">Takk for at du spilte.</p>
       </div>
     );
   }
   if (!question) {
     return (
-      <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
-        <p className="text-zinc-400">Laster spørsmål…</p>
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
+        <p className="text-zinc-600 dark:text-zinc-400">Laster spørsmål…</p>
       </div>
     );
   }
@@ -522,7 +530,7 @@ function QuestionView({
   }
 
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-5">
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5">
       <div>
         <p className="text-xs uppercase tracking-widest text-zinc-500">
           Spørsmål
@@ -532,7 +540,7 @@ function QuestionView({
           <img
             src={question.image_url}
             alt=""
-            className="mt-3 max-h-72 w-full object-contain rounded-lg bg-zinc-950 border border-zinc-800"
+            className="mt-3 max-h-72 w-full object-contain rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
           />
         )}
       </div>
@@ -557,7 +565,7 @@ function QuestionView({
                     ? "bg-red-500/20 border-red-500 text-red-100"
                     : chosen
                     ? "bg-indigo-500/20 border-indigo-500"
-                    : "bg-zinc-950 border-zinc-800 hover:border-zinc-600 disabled:opacity-60")
+                    : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 disabled:opacity-60")
                 }
               >
                 {choice}
@@ -578,7 +586,7 @@ function QuestionView({
             onChange={(e) => setText(e.target.value)}
             disabled={locked || submitting}
             placeholder="Skriv svaret ditt"
-            className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-70"
+            className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-70"
           />
           {!locked && (
             <button
@@ -593,13 +601,13 @@ function QuestionView({
       )}
 
       {submitted && !revealed && (
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Svaret er låst. Venter på at quizmasteren avslører…
         </p>
       )}
 
       {revealed && (
-        <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4 space-y-1">
+        <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 space-y-1">
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Riktig svar
           </p>
@@ -627,7 +635,7 @@ function ResultLine({
   const pa = answer.points_awarded;
   if (pa === null || pa === undefined) {
     return (
-      <p className="text-sm mt-2 text-zinc-400">
+      <p className="text-sm mt-2 text-zinc-600 dark:text-zinc-400">
         Venter på dom fra quizmasteren…
       </p>
     );

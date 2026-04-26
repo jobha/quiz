@@ -30,7 +30,7 @@ export async function POST(
   let newRejoin: string | null = null;
   for (let i = 0; i < 5; i++) {
     const candidate = generateRoomCode(5);
-    const rejoin = generateRoomCode(4);
+    const rejoin = generateRoomCode(6);
     const { data, error } = await sb
       .from("rooms")
       .insert({ code: candidate, host_rejoin_code: rejoin })

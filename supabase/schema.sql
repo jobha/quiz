@@ -11,10 +11,12 @@ create table if not exists rooms (
   phase              text not null default 'lobby',    -- lobby | asking | revealed | ended
   current_question_id uuid,
   show_scoreboard    boolean not null default false,
+  show_own_score     boolean not null default true,
   created_at         timestamptz not null default now()
 );
 alter table rooms add column if not exists host_rejoin_code text;
 alter table rooms add column if not exists show_scoreboard boolean not null default false;
+alter table rooms add column if not exists show_own_score boolean not null default true;
 
 -- Questions --------------------------------------------------------------
 create table if not exists questions (
@@ -43,8 +45,13 @@ create table if not exists players (
 );
 alter table players add column if not exists rejoin_code text;
 create index if not exists players_room_idx on players(room_code);
-create unique index if not exists players_room_rejoin_idx
-  on players(room_code, rejoin_code) where rejoin_code is not null;
+-- Rejoin codes are globally unique so a player can rejoin without
+-- knowing the room code.
+drop index if exists players_room_rejoin_idx;
+create unique index if not exists players_rejoin_code_idx
+  on players(rejoin_code) where rejoin_code is not null;
+create unique index if not exists rooms_host_rejoin_idx
+  on rooms(host_rejoin_code) where host_rejoin_code is not null;
 
 -- Answers ---------------------------------------------------------------
 create table if not exists answers (

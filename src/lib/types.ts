@@ -6,6 +6,7 @@ export type Room = {
   phase: Phase;
   current_question_id: string | null;
   show_scoreboard: boolean;
+  show_own_score: boolean;
   created_at: string;
 };
 

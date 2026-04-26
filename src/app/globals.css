@@ -1,7 +1,21 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  color-scheme: dark light;
+  color-scheme: light;
+  --bg: #fafafa;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #f4f4f5;
+  --fg: #18181b;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0b0b10;
+  --bg-elevated: #18181b;
+  --bg-sunken: #09090b;
+  --fg: #f4f4f5;
 }
 
 html, body {
@@ -9,8 +23,8 @@ html, body {
 }
 
 body {
-  background: #0b0b10;
-  color: #f4f4f5;
+  background: var(--bg);
+  color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
 }

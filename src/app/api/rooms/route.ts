@@ -8,7 +8,7 @@ export async function POST() {
   // Try a few times in the (very unlikely) event of a code collision.
   for (let i = 0; i < 5; i++) {
     const code = generateRoomCode(5);
-    const hostRejoinCode = generateRoomCode(4);
+    const hostRejoinCode = generateRoomCode(6);
     const { data, error } = await sb
       .from("rooms")
       .insert({ code, host_rejoin_code: hostRejoinCode })

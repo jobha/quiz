@@ -11,6 +11,7 @@ import type {
   QuestionType,
   Room,
 } from "@/lib/types";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type RoomWithHostCode = Room & { host_rejoin_code: string | null };
 
@@ -56,7 +57,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           sb
             .from("rooms")
             .select(
-              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, created_at",
+              "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, created_at",
             )
             .eq("code", code)
             .maybeSingle(),
@@ -209,7 +210,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   if (!room) {
     return (
       <Centered>
-        <p className="text-zinc-400">Laster rom…</p>
+        <p className="text-zinc-600 dark:text-zinc-400">Laster rom…</p>
       </Centered>
     );
   }
@@ -219,7 +220,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
       <Centered>
         <div className="max-w-md text-center space-y-3">
           <h1 className="text-2xl font-bold">Trenger vertslenke</h1>
-          <p className="text-zinc-400 text-sm">
+          <p className="text-zinc-600 dark:text-zinc-400 text-sm">
             Denne siden krever den hemmelige vertskoden. Åpne lenken du fikk
             da du laget rommet (den slutter med <code>?k=…</code>), eller
             bruk &quot;Fortsett med en kode&quot; på forsiden.
@@ -234,8 +235,11 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     : `/r/${code}`;
 
   return (
-    <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6">
-      <header className="flex items-start justify-between gap-4 flex-wrap">
+    <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <header className="flex items-start justify-between gap-4 flex-wrap pr-32">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Quizmaster for rom
@@ -243,28 +247,28 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
             {code}
           </h1>
-          <p className="text-sm text-zinc-400 mt-1">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
             Spillere blir med på{" "}
             <button
               onClick={() => navigator.clipboard.writeText(playerLink)}
-              className="underline underline-offset-4 hover:text-zinc-100"
+              className="underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-100"
             >
               {playerLink}
             </button>
           </p>
           {room.host_rejoin_code && (
-            <p className="text-sm text-zinc-400 mt-1">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
               Din quizmasterkode:{" "}
-              <span className="font-mono tracking-widest text-zinc-200">
+              <span className="font-mono tracking-widest text-zinc-800 dark:text-zinc-200">
                 {room.host_rejoin_code}
               </span>
             </p>
           )}
         </div>
         <div className="text-right text-xs text-zinc-500">
-          <p>Fase: <span className="text-zinc-300">{translatePhase(room.phase)}</span></p>
-          <p>Spillere: <span className="text-zinc-300">{players.length}</span></p>
-          <p>Spørsmål: <span className="text-zinc-300">{questions.length}</span></p>
+          <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
+          <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
+          <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
         </div>
       </header>
 
@@ -358,9 +362,9 @@ function CurrentQuestionPanel({
 
   if (room.phase === "ended") {
     return (
-      <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
+      <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
         <h2 className="font-semibold">Quizen er ferdig</h2>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
           Vil du fortsette? Du kan hoppe tilbake til et tidligere spørsmål
           eller gå tilbake til venterommet.
         </p>
@@ -392,7 +396,7 @@ function CurrentQuestionPanel({
               )
             }
             disabled={busy !== null}
-            className="rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-4 py-2 text-sm font-medium"
           >
             Tilbake til venterom
           </button>
@@ -403,7 +407,7 @@ function CurrentQuestionPanel({
   }
 
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Nåværende spørsmål</h2>
         <span className="text-xs text-zinc-500">{translatePhase(room.phase)}</span>
@@ -420,14 +424,14 @@ function CurrentQuestionPanel({
               <img
                 src={question.image_url}
                 alt=""
-                className="mt-2 max-h-56 w-full object-contain rounded-lg bg-zinc-950 border border-zinc-800"
+                className="mt-2 max-h-56 w-full object-contain rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
               />
             )}
             <p className="text-sm text-emerald-400 mt-1">
               Svar: {question.correct_answer}
             </p>
             {question.type === "choice" && question.choices && (
-              <ul className="mt-2 text-sm text-zinc-400 list-disc pl-5">
+              <ul className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 list-disc pl-5">
                 {question.choices.map((c) => (
                   <li
                     key={c}
@@ -440,7 +444,7 @@ function CurrentQuestionPanel({
             )}
           </div>
 
-          <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3">
+          <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3">
             <p className="text-xs text-zinc-500 uppercase tracking-widest mb-2">
               Svar ({answers.length}/{players.length})
             </p>
@@ -474,7 +478,7 @@ function CurrentQuestionPanel({
                   )
                 }
                 disabled={busy !== null}
-                className="rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-3 py-2 text-sm"
+                className="rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-3 py-2 text-sm"
               >
                 ← Forrige
               </button>
@@ -516,7 +520,7 @@ function CurrentQuestionPanel({
                   )
                 }
                 disabled={busy !== null}
-                className="rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+                className="rounded-lg bg-zinc-300 dark:bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60 px-4 py-2 text-sm font-medium"
               >
                 Avslutt quiz
               </button>
@@ -525,7 +529,7 @@ function CurrentQuestionPanel({
         </>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {questions.length === 0
               ? "Legg til et spørsmål for å starte."
               : "Klar når du er det."}
@@ -607,7 +611,7 @@ function AnswerRow({
   return (
     <li className="flex items-center justify-between gap-2 text-sm">
       <div className="min-w-0">
-        <span className="text-zinc-400">{playerName}</span>{" "}
+        <span className="text-zinc-600 dark:text-zinc-400">{playerName}</span>{" "}
         <span className="font-medium">{answer.answer}</span>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -618,7 +622,7 @@ function AnswerRow({
             "px-2 py-0.5 text-xs rounded " +
             (fullChosen
               ? "bg-emerald-500 text-white"
-              : "bg-zinc-800 text-zinc-300 hover:bg-emerald-500/30")
+              : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-emerald-500/30")
           }
           title={`Full pott (${maxPoints})`}
         >
@@ -632,7 +636,7 @@ function AnswerRow({
               "px-2 py-0.5 text-xs rounded " +
               (halfChosen
                 ? "bg-amber-500 text-zinc-900"
-                : "bg-zinc-800 text-zinc-300 hover:bg-amber-500/30")
+                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-amber-500/30")
             }
             title={`Halv pott (${half})`}
           >
@@ -646,7 +650,7 @@ function AnswerRow({
             "px-2 py-0.5 text-xs rounded " +
             (zeroChosen
               ? "bg-red-500 text-white"
-              : "bg-zinc-800 text-zinc-300 hover:bg-red-500/30")
+              : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-red-500/30")
           }
           title="Null poeng"
         >
@@ -665,7 +669,7 @@ function AnswerRow({
             }
           }}
           disabled={busy}
-          className="w-12 rounded bg-zinc-950 border border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+          className="w-12 rounded bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
           placeholder="–"
         />
       </div>
@@ -707,13 +711,13 @@ function QuestionListPanel({
 
   if (questions.length === 0) return null;
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-semibold">Alle spørsmål</h2>
         <button
           onClick={clone}
           disabled={cloning}
-          className="text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-3 py-1.5"
+          className="text-xs rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-3 py-1.5"
           title="Lag en ny quiz med kopier av alle spørsmål"
         >
           {cloning ? "Kloner…" : "📄 Lag ny quiz fra disse"}
@@ -770,7 +774,7 @@ function QuestionListPanel({
                     setBusy(null);
                   }
                 }}
-                className="text-xs px-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                className="text-xs px-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30"
                 title="Flytt opp"
               >
                 ↑
@@ -788,7 +792,7 @@ function QuestionListPanel({
                     setBusy(null);
                   }
                 }}
-                className="text-xs px-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                className="text-xs px-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30"
                 title="Flytt ned"
               >
                 ↓
@@ -898,7 +902,7 @@ function AddQuestionPanel({
   }
 
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-3">
       <h2 className="font-semibold">Legg til spørsmål #{existingCount + 1}</h2>
       <form onSubmit={add} className="space-y-3">
         <div className="flex gap-2">
@@ -909,7 +913,7 @@ function AddQuestionPanel({
               "flex-1 rounded-lg px-3 py-2 text-sm border " +
               (type === "text"
                 ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
-                : "bg-zinc-950 border-zinc-800 text-zinc-400")
+                : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
             }
           >
             Fritekst
@@ -921,7 +925,7 @@ function AddQuestionPanel({
               "flex-1 rounded-lg px-3 py-2 text-sm border " +
               (type === "choice"
                 ? "bg-indigo-500/20 border-indigo-500 text-indigo-100"
-                : "bg-zinc-950 border-zinc-800 text-zinc-400")
+                : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
             }
           >
             Flervalg
@@ -933,7 +937,7 @@ function AddQuestionPanel({
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Spørsmålstekst"
           rows={2}
-          className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
+          className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           required
         />
 
@@ -945,13 +949,13 @@ function AddQuestionPanel({
             type="file"
             accept="image/jpeg,image/png,image/webp,image/gif"
             onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-zinc-200 hover:file:bg-zinc-700"
+            className="block w-full text-sm text-zinc-700 dark:text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-zinc-200 hover:file:bg-zinc-700"
           />
           {imagePreview && (
             <img
               src={imagePreview}
               alt="forhåndsvisning"
-              className="max-h-40 rounded-md border border-zinc-800"
+              className="max-h-40 rounded-md border border-zinc-200 dark:border-zinc-800"
             />
           )}
         </div>
@@ -962,7 +966,7 @@ function AddQuestionPanel({
             onChange={(e) => setChoicesText(e.target.value)}
             placeholder={"Alternativer, ett per linje\nOslo\nBergen\nTrondheim"}
             rows={4}
-            className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono"
+            className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono"
             required
           />
         )}
@@ -971,19 +975,19 @@ function AddQuestionPanel({
           value={correct}
           onChange={(e) => setCorrect(e.target.value)}
           placeholder="Riktig svar"
-          className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
+          className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           required
         />
 
         <div className="flex items-center gap-3">
-          <label className="text-sm text-zinc-400">Poeng</label>
+          <label className="text-sm text-zinc-600 dark:text-zinc-400">Poeng</label>
           <input
             type="number"
             min={1}
             max={10}
             value={points}
             onChange={(e) => setPoints(Number(e.target.value))}
-            className="w-20 rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
+            className="w-20 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           />
         </div>
 
@@ -1016,52 +1020,41 @@ function ScoreboardPanel({
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
   );
 
-  async function toggle() {
+  async function setFlag(field: "show_scoreboard" | "show_own_score", value: boolean) {
     setBusy(true);
     try {
-      await call(`/api/rooms/${room.code}/state`, {
-        show_scoreboard: !room.show_scoreboard,
-      });
+      await call(`/api/rooms/${room.code}/state`, { [field]: value });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
+    <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
       <div className="space-y-2">
         <h2 className="font-semibold">Poengtavle</h2>
-        <button
-          type="button"
-          onClick={toggle}
+        <SwitchRow
+          label="Vis hele poengtavlen"
+          subtitle={
+            room.show_scoreboard
+              ? "Spillerne ser stillingen til alle nå"
+              : "Spillerne ser ikke andres poeng"
+          }
+          checked={room.show_scoreboard}
           disabled={busy}
-          aria-pressed={room.show_scoreboard}
-          className="w-full flex items-center justify-between gap-3 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 disabled:opacity-60 px-4 py-3 text-left"
-        >
-          <span className="flex flex-col">
-            <span className="text-sm font-medium">
-              Vis poengtavle til spillerne
-            </span>
-            <span className="text-xs text-zinc-500">
-              {room.show_scoreboard
-                ? "Spillerne ser stillingen nå"
-                : "Spillerne ser bare seg selv"}
-            </span>
-          </span>
-          <span
-            className={
-              "relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors " +
-              (room.show_scoreboard ? "bg-emerald-500" : "bg-zinc-700")
-            }
-          >
-            <span
-              className={
-                "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
-                (room.show_scoreboard ? "translate-x-5" : "translate-x-0.5")
-              }
-            />
-          </span>
-        </button>
+          onChange={(v) => setFlag("show_scoreboard", v)}
+        />
+        <SwitchRow
+          label="Vis egne poeng"
+          subtitle={
+            room.show_own_score
+              ? "Spillerne ser sin egen poengsum"
+              : "Spillerne ser ingen poeng – kun spørsmål og svar"
+          }
+          checked={room.show_own_score}
+          disabled={busy}
+          onChange={(v) => setFlag("show_own_score", v)}
+        />
       </div>
       {players.length === 0 ? (
         <p className="text-sm text-zinc-500">Ingen spillere ennå.</p>
@@ -1070,7 +1063,7 @@ function ScoreboardPanel({
           {sorted.map((p, i) => (
             <li
               key={p.id}
-              className="flex items-center justify-between text-sm bg-zinc-950 rounded px-3 py-2 gap-2"
+              className="flex items-center justify-between text-sm bg-zinc-50 dark:bg-zinc-950 rounded px-3 py-2 gap-2"
             >
               <span className="truncate">
                 <span className="text-zinc-500 mr-2">{i + 1}.</span>
@@ -1097,6 +1090,49 @@ function ScoreboardPanel({
         </p>
       )}
     </section>
+  );
+}
+
+function SwitchRow({
+  label,
+  subtitle,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  subtitle: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className="w-full flex items-center justify-between gap-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 disabled:opacity-60 px-4 py-3 text-left"
+    >
+      <span className="flex flex-col">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-xs text-zinc-500">{subtitle}</span>
+      </span>
+      <span
+        className={
+          "relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors " +
+          (checked ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700")
+        }
+      >
+        <span
+          className={
+            "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
+            (checked ? "translate-x-5" : "translate-x-0.5")
+          }
+        />
+      </span>
+    </button>
   );
 }
 
