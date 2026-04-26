@@ -647,7 +647,7 @@ function QuestionView({
     <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5">
       <div>
         <p className="text-xs uppercase tracking-widest text-zinc-500">
-          Spørsmål
+          Spørsmål #{question.position}
         </p>
         <h2 className="text-2xl font-semibold mt-1">{question.prompt}</h2>
         {question.image_url && (
