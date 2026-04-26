@@ -8,15 +8,17 @@ export async function POST() {
   // Try a few times in the (very unlikely) event of a code collision.
   for (let i = 0; i < 5; i++) {
     const code = generateRoomCode(5);
+    const hostRejoinCode = generateRoomCode(4);
     const { data, error } = await sb
       .from("rooms")
-      .insert({ code })
-      .select("code, host_secret")
+      .insert({ code, host_rejoin_code: hostRejoinCode })
+      .select("code, host_secret, host_rejoin_code")
       .single();
     if (!error && data) {
       return NextResponse.json({
         code: data.code,
         host_secret: data.host_secret,
+        host_rejoin_code: data.host_rejoin_code,
       });
     }
     if (error && error.code !== "23505") {

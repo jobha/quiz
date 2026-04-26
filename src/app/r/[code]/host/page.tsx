@@ -12,6 +12,8 @@ import type {
   Room,
 } from "@/lib/types";
 
+type RoomWithHostCode = Room & { host_rejoin_code: string | null };
+
 type Params = { code: string };
 
 export default function HostPage({ params }: { params: Promise<Params> }) {
@@ -40,7 +42,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     }
   }, [code, router, searchParams, storageKey]);
 
-  const [room, setRoom] = useState<Room | null>(null);
+  const [room, setRoom] = useState<RoomWithHostCode | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
@@ -55,7 +57,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         await Promise.all([
           sb
             .from("rooms")
-            .select("code, phase, current_question_id, created_at")
+            .select("code, phase, current_question_id, host_rejoin_code, created_at")
             .eq("code", code)
             .maybeSingle(),
           sb.from("questions").select("*").eq("room_code", code).order("position"),
@@ -63,7 +65,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           sb.from("answers").select("*").eq("room_code", code),
         ]);
       if (cancelled) return;
-      setRoom((roomData as Room) ?? null);
+      setRoom((roomData as RoomWithHostCode) ?? null);
       setQuestions((qs as Question[]) ?? []);
       setPlayers((ps as Player[]) ?? []);
       setAnswers((as as Answer[]) ?? []);
@@ -77,7 +79,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         { event: "*", schema: "public", table: "rooms", filter: `code=eq.${code}` },
         (payload) => {
           if (payload.new && "code" in payload.new) {
-            setRoom(payload.new as Room);
+            setRoom(payload.new as RoomWithHostCode);
           }
         },
       )
@@ -238,6 +240,14 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
               {playerLink}
             </button>
           </p>
+          {room.host_rejoin_code && (
+            <p className="text-sm text-zinc-400 mt-1">
+              Host rejoin code:{" "}
+              <span className="font-mono tracking-widest text-zinc-200">
+                {room.host_rejoin_code}
+              </span>
+            </p>
+          )}
         </div>
         <div className="text-right text-xs text-zinc-500">
           <p>Phase: <span className="text-zinc-300">{room.phase}</span></p>

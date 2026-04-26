@@ -7,7 +7,7 @@ phone.
 - **Free text** and **multiple choice** questions
 - Real-time updates via Supabase
 - Rejoin from a closed browser using the same link (player ID lives in the
-  URL and `localStorage`)
+  URL and `localStorage`), or by typing a 4-char rejoin code on any device
 - Hosted free on Vercel + Supabase
 
 ## Stack
@@ -70,6 +70,11 @@ Open http://localhost:3000.
   a loose match; the host can override with ✓/✗ during reveal.
 - **Auth** — All writes go through `/api/...` routes that check the host
   secret. Reads use Supabase realtime with read-only RLS.
+- **Rejoin codes** — Each player gets a short 4-char code shown in their
+  header; the host gets a "host rejoin code" shown on the host page. From
+  the landing page, anyone can type the room code + their personal code on
+  any device to come back as themselves. The original `?p=` / `?k=` links
+  still work too.
 
 ## Roadmap (easy next steps)
 

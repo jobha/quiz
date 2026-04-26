@@ -5,12 +5,14 @@ create extension if not exists "pgcrypto";
 
 -- Rooms ------------------------------------------------------------------
 create table if not exists rooms (
-  code            text primary key,                 -- short code, e.g. ABC123
-  host_secret     uuid not null default gen_random_uuid(),
-  phase           text not null default 'lobby',    -- lobby | asking | revealed | ended
+  code               text primary key,                 -- short code, e.g. ABC123
+  host_secret        uuid not null default gen_random_uuid(),
+  host_rejoin_code   text,                             -- short shareable host code
+  phase              text not null default 'lobby',    -- lobby | asking | revealed | ended
   current_question_id uuid,
-  created_at      timestamptz not null default now()
+  created_at         timestamptz not null default now()
 );
+alter table rooms add column if not exists host_rejoin_code text;
 
 -- Questions --------------------------------------------------------------
 create table if not exists questions (
@@ -32,9 +34,13 @@ create table if not exists players (
   id              uuid primary key default gen_random_uuid(),
   room_code       text not null references rooms(code) on delete cascade,
   name            text not null,
+  rejoin_code     text,                            -- short shareable code, unique within room
   created_at      timestamptz not null default now()
 );
+alter table players add column if not exists rejoin_code text;
 create index if not exists players_room_idx on players(room_code);
+create unique index if not exists players_room_rejoin_idx
+  on players(room_code, rejoin_code) where rejoin_code is not null;
 
 -- Answers ---------------------------------------------------------------
 create table if not exists answers (

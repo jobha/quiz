@@ -24,6 +24,7 @@ export type Player = {
   id: string;
   room_code: string;
   name: string;
+  rejoin_code: string | null;
   created_at: string;
 };
 

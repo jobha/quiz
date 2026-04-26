@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import { normalizeRoomCode } from "@/lib/room-code";
+import { generateRoomCode, normalizeRoomCode } from "@/lib/room-code";
 
 export async function POST(
   req: NextRequest,
@@ -22,12 +22,23 @@ export async function POST(
     .maybeSingle();
   if (!room) return new NextResponse("Room not found", { status: 404 });
 
-  const { data, error } = await sb
-    .from("players")
-    .insert({ room_code: code, name })
-    .select("id")
-    .single();
-  if (error) return new NextResponse(error.message, { status: 500 });
-
-  return NextResponse.json({ player_id: data.id });
+  // Generate a unique 4-char rejoin code within this room.
+  for (let i = 0; i < 10; i++) {
+    const rejoinCode = generateRoomCode(4);
+    const { data, error } = await sb
+      .from("players")
+      .insert({ room_code: code, name, rejoin_code: rejoinCode })
+      .select("id, rejoin_code")
+      .single();
+    if (!error && data) {
+      return NextResponse.json({
+        player_id: data.id,
+        rejoin_code: data.rejoin_code,
+      });
+    }
+    if (error && error.code !== "23505") {
+      return new NextResponse(error.message, { status: 500 });
+    }
+  }
+  return new NextResponse("Could not allocate rejoin code", { status: 500 });
 }

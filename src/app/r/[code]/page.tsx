@@ -267,12 +267,20 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
 
   return (
     <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Room {code}
           </p>
           <p className="text-lg font-semibold">{me.name}</p>
+          {me.rejoin_code && (
+            <p className="text-xs text-zinc-500 mt-1">
+              Your rejoin code:{" "}
+              <span className="font-mono tracking-widest text-zinc-300">
+                {me.rejoin_code}
+              </span>
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-xs text-zinc-500 uppercase tracking-widest">Score</p>
