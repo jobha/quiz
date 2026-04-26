@@ -307,33 +307,52 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           }}
         />
       )}
-      <ReactionsLayer reactions={reactions} players={players} />
+      <ReactionsLayer
+        reactions={reactions}
+        players={[
+          ...players,
+          {
+            id: hostSenderId,
+            name: "Quizmaster",
+            avatar_emoji: room.host_avatar_emoji,
+            avatar_color: room.host_avatar_color,
+          } as Player,
+        ]}
+      />
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-widest">
-            Quizmaster for rom
-          </p>
-          <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
-            {code}
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-            Spillere blir med på{" "}
-            <button
-              onClick={() => navigator.clipboard.writeText(playerLink)}
-              className="underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              {playerLink}
-            </button>
-          </p>
-          {room.host_rejoin_code && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-              Din quizmasterkode:{" "}
-              <span className="font-mono tracking-widest text-zinc-800 dark:text-zinc-200">
-                {room.host_rejoin_code}
-              </span>
+        <div className="flex items-start gap-3">
+          <HostAvatarPicker
+            emoji={room.host_avatar_emoji}
+            color={room.host_avatar_color}
+            roomCode={code}
+            call={call}
+          />
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest">
+              Quizmaster for rom
             </p>
-          )}
+            <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
+              {code}
+            </h1>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+              Spillere blir med på{" "}
+              <button
+                onClick={() => navigator.clipboard.writeText(playerLink)}
+                className="underline underline-offset-4 hover:text-zinc-900 dark:hover:text-zinc-100"
+              >
+                {playerLink}
+              </button>
+            </p>
+            {room.host_rejoin_code && (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
+                Din quizmasterkode:{" "}
+                <span className="font-mono tracking-widest text-zinc-800 dark:text-zinc-200">
+                  {room.host_rejoin_code}
+                </span>
+              </p>
+            )}
+          </div>
         </div>
       </header>
 
@@ -381,6 +400,109 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
 
       <ReactionsBar onReact={(emoji) => sendReaction(emoji)} />
     </main>
+  );
+}
+
+const HOST_AVATAR_EMOJIS = [
+  "👑", "🎩", "🎤", "🎬", "🎲", "🃏", "🦊", "🐼",
+  "🦄", "🐙", "🚀", "⚡", "🔥", "✨", "🎯", "🧙",
+];
+const HOST_AVATAR_COLORS = [
+  "#6366f1", "#10b981", "#f59e0b", "#ef4444",
+  "#ec4899", "#8b5cf6", "#06b6d4", "#84cc16",
+];
+
+function HostAvatarPicker({
+  emoji,
+  color,
+  roomCode,
+  call,
+}: {
+  emoji: string | null;
+  color: string | null;
+  roomCode: string;
+  call: (path: string, body: unknown) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function update(next: { emoji?: string | null; color?: string | null }) {
+    setBusy(true);
+    try {
+      const body: Record<string, unknown> = {};
+      if ("emoji" in next) body.host_avatar_emoji = next.emoji;
+      if ("color" in next) body.host_avatar_color = next.color;
+      await call(`/api/rooms/${roomCode}/state`, body);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="rounded-full hover:opacity-80 transition"
+        aria-label="Endre avatar"
+        title="Endre din quizmaster-avatar"
+      >
+        <Avatar emoji={emoji} color={color} name="Quizmaster" size="lg" />
+      </button>
+      {open && (
+        <div className="absolute z-20 left-0 top-full mt-2 w-72 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 space-y-2 shadow-lg">
+          <p className="text-xs text-zinc-500 uppercase tracking-widest">
+            Quizmaster-figur
+          </p>
+          <div className="grid grid-cols-8 gap-1">
+            {HOST_AVATAR_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                disabled={busy}
+                onClick={() => update({ emoji: e })}
+                className={
+                  "h-8 rounded-md text-xl transition " +
+                  (emoji === e
+                    ? "bg-zinc-200 dark:bg-zinc-800 ring-2"
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                }
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-500 uppercase tracking-widest">
+            Farge
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {HOST_AVATAR_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                disabled={busy}
+                onClick={() => update({ color: c })}
+                className={
+                  "w-7 h-7 rounded-full border-2 transition " +
+                  (color === c
+                    ? "border-zinc-900 dark:border-zinc-100 scale-110"
+                    : "border-zinc-300 dark:border-zinc-700 hover:scale-105")
+                }
+                style={{ backgroundColor: c }}
+                aria-label={`Sett farge ${c}`}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full text-xs rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 px-3 py-1.5"
+          >
+            Lukk
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1357,7 +1479,6 @@ function AddQuestionPanel({
   const [tolerance, setTolerance] = useState("0"); // for numeric
   const [choicesText, setChoicesText] = useState("");
   const [points, setPoints] = useState(1);
-  const [roundName, setRoundName] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -1432,7 +1553,6 @@ function AddQuestionPanel({
         points,
         image_url: imageUrl,
         audio_url: audioUrl,
-        round_name: roundName.trim() || null,
       });
       setPrompt("");
       setCorrect("");
@@ -1440,7 +1560,6 @@ function AddQuestionPanel({
       setTolerance("0");
       setChoicesText("");
       setPoints(1);
-      // Keep roundName so the host can chain questions in the same round.
       handleImage(null);
       setAudioFile(null);
     } catch (e) {
@@ -1478,14 +1597,6 @@ function AddQuestionPanel({
             </button>
           ))}
         </div>
-
-        <input
-          value={roundName}
-          onChange={(e) => setRoundName(e.target.value)}
-          placeholder="Runde (valgfritt – f.eks. «Norsk pop»)"
-          maxLength={80}
-          className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
-        />
 
         <textarea
           value={prompt}

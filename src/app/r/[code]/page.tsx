@@ -539,7 +539,20 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         />
       )}
       {!previewMode && <Confetti trigger={room.phase === "ended"} />}
-      {!previewMode && <ReactionsLayer reactions={reactions} players={players} />}
+      {!previewMode && (
+        <ReactionsLayer
+          reactions={reactions}
+          players={[
+            ...players,
+            {
+              id: `host:${code}`,
+              name: "Quizmaster",
+              avatar_emoji: room.host_avatar_emoji,
+              avatar_color: room.host_avatar_color,
+            } as Player,
+          ]}
+        />
+      )}
       {!previewMode && spotlightAnswer && spotlightPlayer && (
         <SpotlightOverlay
           answer={spotlightAnswer}
