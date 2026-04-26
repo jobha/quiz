@@ -271,11 +271,6 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             </p>
           )}
         </div>
-        <div className="text-right text-xs text-zinc-500">
-          <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
-          <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
-          <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
-        </div>
       </header>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -333,7 +328,7 @@ function PlayerPreviewPanel({ code }: { code: string }) {
           </p>
           <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800">
             <iframe
-              src={`/r/${code}`}
+              src={`/r/${code}?preview=1`}
               title="Spiller-forhåndsvisning"
               className="w-full h-[640px] bg-zinc-50 dark:bg-zinc-950"
             />

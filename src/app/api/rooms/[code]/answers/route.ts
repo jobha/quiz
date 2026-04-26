@@ -3,6 +3,20 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { normalizeRoomCode } from "@/lib/room-code";
 import type { Question } from "@/lib/types";
 
+function looseEquals(a: string, b: string): boolean {
+  return normalizeText(a) === normalizeText(b);
+}
+
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\p{L}\p{N} ]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> },
@@ -79,6 +93,13 @@ export async function POST(
       const within = Math.abs(guess - target) <= tol;
       isCorrect = within;
       pointsAwarded = within ? q.points : 0;
+    }
+  } else if (q.type === "text") {
+    // Loose-match free text: award full points on a normalized hit.
+    // Misses stay null so the host can still award partial credit.
+    if (looseEquals(answerText, q.correct_answer)) {
+      isCorrect = true;
+      pointsAwarded = q.points;
     }
   }
 

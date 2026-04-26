@@ -18,6 +18,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const playerIdFromUrl = searchParams.get("p");
+  const previewMode = searchParams.get("preview") === "1";
 
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -326,7 +327,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     );
   }
 
-  if (!playerId || !me) {
+  if (!previewMode && (!playerId || !me)) {
     return (
       <Centered>
         <div className="w-full max-w-md space-y-6">
@@ -372,24 +373,33 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6"
       style={accentStyle}
     >
-      <Confetti trigger={room.phase === "ended"} />
-      <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
+      {!previewMode && <Confetti trigger={room.phase === "ended"} />}
+      {!previewMode && (
+        <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
+      )}
+      {previewMode && (
+        <div className="rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-800 dark:text-amber-200 px-3 py-2 text-xs">
+          🔍 Forhåndsvisning – sånn ser spillerne det. Endringer her lagres ikke.
+        </div>
+      )}
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Rom {code}
           </p>
-          <p className="text-lg font-semibold">{me.name}</p>
-          {me.rejoin_code && (
+          <p className="text-lg font-semibold">
+            {previewMode ? "Eksempel-spiller" : me!.name}
+          </p>
+          {!previewMode && me!.rejoin_code && (
             <p className="text-xs text-zinc-500 mt-1">
               Din kode for å fortsette:{" "}
               <span className="font-mono tracking-widest text-zinc-700 dark:text-zinc-300">
-                {me.rejoin_code}
+                {me!.rejoin_code}
               </span>
             </p>
           )}
         </div>
-        {room.show_own_score && (
+        {room.show_own_score && !previewMode && (
           <div className="text-right">
             <p className="text-xs text-zinc-500 uppercase tracking-widest">
               Poeng
@@ -402,9 +412,12 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       <PlayerStage
         room={room}
         question={question}
-        myAnswer={question ? myAnswers[question.id] : undefined}
-        playerId={playerId}
+        myAnswer={
+          !previewMode && question ? myAnswers[question.id] : undefined
+        }
+        playerId={playerId ?? "preview"}
         code={code}
+        previewMode={previewMode}
       />
 
       {room.show_history && (
@@ -420,7 +433,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
         <ScoreboardForPlayers
           players={players}
           scores={allScores}
-          myId={playerId}
+          myId={playerId ?? ""}
           hideCodes={room.hide_rejoin_codes}
         />
       ) : (
@@ -515,12 +528,14 @@ function PlayerStage({
   myAnswer,
   playerId,
   code,
+  previewMode,
 }: {
   room: Room;
   question: Question | null;
   myAnswer: Answer | undefined;
   playerId: string;
   code: string;
+  previewMode: boolean;
 }) {
   if (room.phase === "lobby") {
     return (
@@ -551,6 +566,7 @@ function PlayerStage({
       myAnswer={myAnswer}
       playerId={playerId}
       code={code}
+      previewMode={previewMode}
     />
   );
 }
@@ -561,12 +577,14 @@ function QuestionView({
   myAnswer,
   playerId,
   code,
+  previewMode,
 }: {
   room: Room;
   question: Question;
   myAnswer: Answer | undefined;
   playerId: string;
   code: string;
+  previewMode: boolean;
 }) {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -588,7 +606,7 @@ function QuestionView({
   const submitted = !!myAnswer;
 
   async function submit(answer: string) {
-    if (!answer.trim()) return;
+    if (!answer.trim() || previewMode) return;
     setSubmitting(true);
     setError(null);
     try {
