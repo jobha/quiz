@@ -308,7 +308,8 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   }
 
   return (
-    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
+    <main className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6">
+      <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
@@ -324,17 +325,14 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
             </p>
           )}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <ThemeToggle />
-          {room.show_own_score && (
-            <div className="text-right">
-              <p className="text-xs text-zinc-500 uppercase tracking-widest">
-                Poeng
-              </p>
-              <p className="text-2xl font-bold leading-none">{myScore}</p>
-            </div>
-          )}
-        </div>
+        {room.show_own_score && (
+          <div className="text-right">
+            <p className="text-xs text-zinc-500 uppercase tracking-widest">
+              Poeng
+            </p>
+            <p className="text-2xl font-bold leading-none">{myScore}</p>
+          </div>
+        )}
       </header>
 
       <PlayerStage

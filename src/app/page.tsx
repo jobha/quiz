@@ -65,10 +65,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 relative">
-      <div className="absolute top-4 right-4">
-        <ThemeToggle />
-      </div>
+    <main className="min-h-screen flex items-center justify-center p-6 pb-24">
+      <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <div className="w-full max-w-md space-y-6">
         <header className="text-center space-y-2">
           <h1 className="text-4xl font-bold">Quiz</h1>

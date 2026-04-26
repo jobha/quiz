@@ -235,7 +235,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     : `/r/${code}`;
 
   return (
-    <main className="min-h-screen p-6 max-w-5xl mx-auto space-y-6">
+    <main className="min-h-screen p-6 pb-24 max-w-5xl mx-auto space-y-6">
+      <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
@@ -262,13 +263,10 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             </p>
           )}
         </div>
-        <div className="flex flex-col items-end gap-3">
-          <ThemeToggle />
-          <div className="text-right text-xs text-zinc-500">
-            <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
-            <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
-            <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
-          </div>
+        <div className="text-right text-xs text-zinc-500">
+          <p>Fase: <span className="text-zinc-700 dark:text-zinc-300">{translatePhase(room.phase)}</span></p>
+          <p>Spillere: <span className="text-zinc-700 dark:text-zinc-300">{players.length}</span></p>
+          <p>Spørsmål: <span className="text-zinc-700 dark:text-zinc-300">{questions.length}</span></p>
         </div>
       </header>
 
