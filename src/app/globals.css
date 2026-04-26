@@ -80,6 +80,21 @@ body {
 .accent-bg-faded-strong {
   background-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
+@keyframes bonus-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -16px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
 @keyframes round-summary {
   0% {
     opacity: 0;

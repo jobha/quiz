@@ -57,6 +57,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const [allAnswers, setAllAnswers] = useState<Answer[]>([]);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
+  const [bonusToast, setBonusToast] = useState<{
+    id: string;
+    points: number;
+    reason: string | null;
+  } | null>(null);
 
   // Hooks below this line must run on every render — keep them
   // unconditional and above the early returns.
@@ -316,6 +321,46 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [room?.current_question_id]);
 
+  // Watch for bonuses awarded to this player → celebratory toast.
+  useEffect(() => {
+    if (!playerId || previewMode) return;
+    const sb = supabaseBrowser();
+    const channel = sb
+      .channel(`bonus:${playerId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "bonus_points",
+          filter: `player_id=eq.${playerId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            points: number;
+            reason: string | null;
+          };
+          setBonusToast({
+            id: row.id,
+            points: row.points,
+            reason: row.reason,
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      sb.removeChannel(channel);
+    };
+  }, [playerId, previewMode]);
+
+  // Auto-dismiss the toast.
+  useEffect(() => {
+    if (!bonusToast) return;
+    const t = setTimeout(() => setBonusToast(null), 4500);
+    return () => clearTimeout(t);
+  }, [bonusToast]);
+
   // Load my answers + subscribe.
   useEffect(() => {
     if (!playerId) return;
@@ -570,6 +615,23 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           answers={allAnswers}
           players={players}
         />
+      )}
+      {!previewMode && bonusToast && (
+        <div
+          key={bonusToast.id}
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-40 rounded-2xl accent-bg px-5 py-3 shadow-2xl text-center animate-[bonus-pop_400ms_cubic-bezier(0.2,0.7,0.2,1)] pointer-events-none"
+        >
+          <p className="text-xs uppercase tracking-widest opacity-80">
+            {bonusToast.points >= 0 ? "Bonus!" : "Straff"}
+          </p>
+          <p className="text-3xl font-bold">
+            {bonusToast.points >= 0 ? "+" : ""}
+            {bonusToast.points}
+          </p>
+          {bonusToast.reason && (
+            <p className="text-sm opacity-90 mt-1">{bonusToast.reason}</p>
+          )}
+        </div>
       )}
       {!previewMode && spotlightAnswer && spotlightPlayer && (
         <SpotlightOverlay

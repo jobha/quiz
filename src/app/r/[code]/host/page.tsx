@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeRoomCode } from "@/lib/room-code";
 import type {
   Answer,
+  BonusPoints,
   Player,
   Question,
   QuestionType,
@@ -55,7 +56,14 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
+  const [bonusEntries, setBonusEntries] = useState<BonusPoints[]>([]);
+  const bonusByPlayer = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const b of bonusEntries) {
+      map[b.player_id] = (map[b.player_id] ?? 0) + b.points;
+    }
+    return map;
+  }, [bonusEntries]);
 
   // Reaction hooks — must run unconditionally on every render.
   const hostSenderId = `host:${code}`;
@@ -83,18 +91,14 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         sb.from("questions").select("*").eq("room_code", code).order("position"),
         sb.from("players").select("*").eq("room_code", code).order("created_at"),
         sb.from("answers").select("*").eq("room_code", code),
-        sb.from("bonus_points").select("player_id, points").eq("room_code", code),
+        sb.from("bonus_points").select("*").eq("room_code", code).order("created_at"),
       ]);
       if (cancelled) return;
       setRoom((roomData as RoomWithHostCode) ?? null);
       setQuestions((qs as Question[]) ?? []);
       setPlayers((ps as Player[]) ?? []);
       setAnswers((as as Answer[]) ?? []);
-      const bonusMap: Record<string, number> = {};
-      for (const b of (bs ?? []) as { player_id: string; points: number }[]) {
-        bonusMap[b.player_id] = (bonusMap[b.player_id] ?? 0) + b.points;
-      }
-      setBonusByPlayer(bonusMap);
+      setBonusEntries((bs as BonusPoints[]) ?? []);
     }
     load();
 
@@ -175,19 +179,22 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bonus_points", filter: `room_code=eq.${code}` },
-        () => {
-          // Refetch the aggregate on any bonus_points change.
-          sb.from("bonus_points")
-            .select("player_id, points")
-            .eq("room_code", code)
-            .then(({ data }) => {
-              if (!data) return;
-              const map: Record<string, number> = {};
-              for (const b of data as { player_id: string; points: number }[]) {
-                map[b.player_id] = (map[b.player_id] ?? 0) + b.points;
-              }
-              setBonusByPlayer(map);
-            });
+        (payload) => {
+          setBonusEntries((prev) => {
+            if (payload.eventType === "INSERT")
+              return [...prev, payload.new as BonusPoints];
+            if (payload.eventType === "UPDATE")
+              return prev.map((b) =>
+                b.id === (payload.new as BonusPoints).id
+                  ? (payload.new as BonusPoints)
+                  : b,
+              );
+            if (payload.eventType === "DELETE") {
+              const removed = payload.old as { id: string };
+              return prev.filter((b) => b.id !== removed.id);
+            }
+            return prev;
+          });
         },
       )
       .on(
@@ -408,7 +415,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             scores={scores}
             questions={questions}
             answers={answers}
-            bonusByPlayer={bonusByPlayer}
+            bonusEntries={bonusEntries}
             roomCode={code}
             call={call}
           />
@@ -1784,7 +1791,7 @@ function ScoreboardPanel({
   scores,
   questions,
   answers,
-  bonusByPlayer,
+  bonusEntries,
   roomCode,
   call,
 }: {
@@ -1792,7 +1799,7 @@ function ScoreboardPanel({
   scores: Record<string, number>;
   questions: Question[];
   answers: Answer[];
-  bonusByPlayer: Record<string, number>;
+  bonusEntries: BonusPoints[];
   roomCode: string;
   call: (path: string, body: unknown) => Promise<unknown>;
 }) {
@@ -1873,9 +1880,11 @@ function ScoreboardPanel({
                         );
                       })
                     )}
-                    <BonusPointsRow
+                    <BonusPointsList
                       playerId={p.id}
-                      bonusTotal={bonusByPlayer[p.id] ?? 0}
+                      entries={bonusEntries.filter(
+                        (b) => b.player_id === p.id,
+                      )}
                       roomCode={roomCode}
                       call={call}
                     />
@@ -2068,18 +2077,18 @@ function RoundHeader({
   );
 }
 
-function BonusPointsRow({
+function BonusPointsList({
   playerId,
-  bonusTotal,
+  entries,
   roomCode,
   call,
 }: {
   playerId: string;
-  bonusTotal: number;
+  entries: BonusPoints[];
   roomCode: string;
   call: (path: string, body: unknown) => Promise<unknown>;
 }) {
-  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [points, setPoints] = useState("1");
   const [reason, setReason] = useState("");
@@ -2098,7 +2107,7 @@ function BonusPointsRow({
       });
       setReason("");
       setPoints("1");
-      setOpen(false);
+      setAdding(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Klarte ikke å gi bonus");
     } finally {
@@ -2106,26 +2115,57 @@ function BonusPointsRow({
     }
   }
 
+  async function remove(id: string) {
+    setBusy(true);
+    try {
+      await call(`/api/rooms/${roomCode}/bonus/delete`, { id });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="text-xs py-1 space-y-1">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full hover:opacity-80"
-      >
-        <span className="text-zinc-500">+ Bonus</span>
-        <span className="font-mono text-zinc-500">
-          {bonusTotal !== 0 ? (bonusTotal > 0 ? `+${bonusTotal}` : bonusTotal) : "—"}
-        </span>
-      </button>
-      {open && (
-        <div className="flex items-center gap-2">
+    <div className="text-xs space-y-1 pt-1 border-t border-zinc-200 dark:border-zinc-800">
+      {entries.map((b) => (
+        <div key={b.id} className="flex items-center gap-2 py-0.5">
+          <span className="text-zinc-500 shrink-0 w-5 text-right">
+            {b.points >= 0 ? "+" : ""}
+          </span>
+          <span className="flex-1 min-w-0 truncate text-zinc-700 dark:text-zinc-300">
+            {b.reason ?? <span className="italic text-zinc-500">Bonus</span>}
+          </span>
+          <span
+            className={
+              "font-mono shrink-0 w-12 text-center " +
+              (b.points >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-500 dark:text-red-400")
+            }
+          >
+            {b.points}
+          </span>
+          <span className="text-zinc-500 shrink-0 w-12 text-right">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => remove(b.id)}
+              className="hover:text-red-500 disabled:opacity-30"
+              title="Fjern denne bonusen"
+            >
+              ✗
+            </button>
+          </span>
+        </div>
+      ))}
+      {adding ? (
+        <div className="flex items-center gap-2 py-0.5">
           <input
             type="number"
             step={0.5}
             value={points}
             onChange={(e) => setPoints(e.target.value)}
-            className="w-16 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+            className="w-14 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+            autoFocus
           />
           <input
             type="text"
@@ -2133,6 +2173,10 @@ function BonusPointsRow({
             onChange={(e) => setReason(e.target.value)}
             placeholder="grunn (valgfritt)"
             className="flex-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-2 py-0.5 text-xs"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") add();
+              if (e.key === "Escape") setAdding(false);
+            }}
           />
           <button
             type="button"
@@ -2142,7 +2186,23 @@ function BonusPointsRow({
           >
             Gi
           </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setAdding(false)}
+            className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 px-1 text-xs"
+          >
+            Avbryt
+          </button>
         </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="text-zinc-500 hover:accent-text"
+        >
+          + Bonus
+        </button>
       )}
       {error && <p className="text-red-500">{error}</p>}
     </div>
