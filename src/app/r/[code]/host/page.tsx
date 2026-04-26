@@ -244,6 +244,15 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
       className="min-h-screen p-6 pb-24 max-w-5xl mx-auto space-y-6"
       style={accentStyle}
     >
+      {room.accent_color && (
+        <div
+          aria-hidden
+          className="fixed inset-0 -z-10 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse 1200px 480px at 50% 0%, color-mix(in srgb, ${room.accent_color} 12%, transparent), transparent 70%)`,
+          }}
+        />
+      )}
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -288,6 +297,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             currentId={room.current_question_id}
             call={call}
             roomCode={code}
+            allAnswers={answers}
+            playerCount={players.length}
           />
         </div>
 
@@ -297,7 +308,14 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
             call={call}
             uploadFile={uploadFile}
           />
-          <ScoreboardPanel players={players} scores={scores} />
+          <ScoreboardPanel
+            players={players}
+            scores={scores}
+            questions={questions}
+            answers={answers}
+            roomCode={code}
+            call={call}
+          />
           <PlayerPreviewPanel code={code} />
         </div>
       </div>
@@ -417,7 +435,7 @@ function CurrentQuestionPanel({
                 )
               }
               disabled={busy !== null}
-              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+              className="rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium"
             >
               Fortsett quizen
             </button>
@@ -442,11 +460,18 @@ function CurrentQuestionPanel({
     );
   }
 
+  const isRevealed = !!question?.revealed;
   return (
     <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Nåværende spørsmål</h2>
-        <span className="text-xs text-zinc-500">{translatePhase(room.phase)}</span>
+        <span className="text-xs text-zinc-500">
+          {question
+            ? isRevealed
+              ? "avslørt"
+              : "samler svar"
+            : "venter"}
+        </span>
       </div>
 
       {question ? (
@@ -463,7 +488,7 @@ function CurrentQuestionPanel({
                 className="mt-2 max-h-56 w-full object-contain rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
               />
             )}
-            <p className="text-sm text-emerald-400 mt-1">
+            <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">
               Svar: {question.correct_answer}
             </p>
             {question.type === "choice" && question.choices && (
@@ -471,7 +496,7 @@ function CurrentQuestionPanel({
                 {question.choices.map((c) => (
                   <li
                     key={c}
-                    className={c === question.correct_answer ? "text-emerald-400" : ""}
+                    className={c === question.correct_answer ? "text-emerald-600 dark:text-emerald-400" : ""}
                   >
                     {c}
                   </li>
@@ -485,7 +510,7 @@ function CurrentQuestionPanel({
               <p className="text-xs text-zinc-500 uppercase tracking-widest">
                 Svar ({answers.length}/{players.length})
               </p>
-              {room.phase === "asking" && typingNames.length > 0 && (
+              {!isRevealed && typingNames.length > 0 && (
                 <p className="text-xs text-zinc-500">
                   ✏️{" "}
                   {typingNames.length <= 3
@@ -518,7 +543,6 @@ function CurrentQuestionPanel({
                 onClick={() =>
                   run("prev", () =>
                     call(`/api/rooms/${room.code}/state`, {
-                      phase: "revealed",
                       current_question_id: prev.id,
                     }),
                   )
@@ -529,55 +553,54 @@ function CurrentQuestionPanel({
                 ← Forrige
               </button>
             )}
-            {room.phase === "asking" && (
-              <>
-                <button
-                  onClick={() =>
-                    run("reveal", () =>
-                      call(`/api/rooms/${room.code}/state`, { phase: "revealed" }),
-                    )
-                  }
-                  disabled={busy !== null}
-                  className="rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-60 px-4 py-2 text-sm font-medium text-zinc-950"
-                >
-                  Avslør svar
-                </button>
-                {next && (
-                  <button
-                    onClick={() =>
-                      run("skip", () =>
-                        call(`/api/rooms/${room.code}/state`, {
-                          phase: "asking",
-                          current_question_id: next.id,
-                        }),
-                      )
-                    }
-                    disabled={busy !== null}
-                    className="rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-4 py-2 text-sm font-medium"
-                    title="Gå videre uten å avsløre. Du kan komme tilbake og avsløre senere."
-                  >
-                    Hopp uten å avsløre →
-                  </button>
-                )}
-              </>
+            {!isRevealed ? (
+              <button
+                onClick={() =>
+                  run("reveal", () =>
+                    call(`/api/rooms/${room.code}/questions/reveal`, {
+                      id: question.id,
+                      revealed: true,
+                    }),
+                  )
+                }
+                disabled={busy !== null}
+                className="rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-60 px-4 py-2 text-sm font-medium text-zinc-950"
+              >
+                Avslør svar
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  run("unreveal", () =>
+                    call(`/api/rooms/${room.code}/questions/reveal`, {
+                      id: question.id,
+                      revealed: false,
+                    }),
+                  )
+                }
+                disabled={busy !== null}
+                className="rounded-lg bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-60 px-3 py-2 text-sm"
+                title="Skjul svaret igjen og la spillerne svare videre."
+              >
+                Skjul svar igjen
+              </button>
             )}
-            {room.phase === "revealed" && next && (
+            {next && (
               <button
                 onClick={() =>
                   run("next", () =>
                     call(`/api/rooms/${room.code}/state`, {
-                      phase: "asking",
                       current_question_id: next.id,
                     }),
                   )
                 }
                 disabled={busy !== null}
-                className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+                className="rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium text-white"
               >
-                Neste spørsmål →
+                {isRevealed ? "Neste spørsmål →" : "Hopp uten å avsløre →"}
               </button>
             )}
-            {room.phase === "revealed" && !next && (
+            {!next && (
               <button
                 onClick={() =>
                   run("end", () =>
@@ -610,7 +633,7 @@ function CurrentQuestionPanel({
                 )
               }
               disabled={busy !== null}
-              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+              className="rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium"
             >
               Start med spørsmål 1
             </button>
@@ -748,11 +771,15 @@ function QuestionListPanel({
   currentId,
   call,
   roomCode,
+  allAnswers,
+  playerCount,
 }: {
   questions: Question[];
   currentId: string | null;
   call: (path: string, body: unknown) => Promise<unknown>;
   roomCode: string;
+  allAnswers: Answer[];
+  playerCount: number;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [cloning, setCloning] = useState(false);
@@ -816,11 +843,14 @@ function QuestionListPanel({
               index={i}
               isCurrent={q.id === currentId}
               isEditing={editingId === q.id}
+              answerCount={
+                allAnswers.filter((a) => a.question_id === q.id).length
+              }
+              playerCount={playerCount}
               onJump={async () => {
                 setBusy(q.id);
                 try {
                   await call(`/api/rooms/${roomCode}/state`, {
-                    phase: "revealed",
                     current_question_id: q.id,
                   });
                 } finally {
@@ -860,6 +890,8 @@ function QuestionListRow({
   index,
   isCurrent,
   isEditing,
+  answerCount,
+  playerCount,
   onJump,
   onDelete,
   onEdit,
@@ -871,6 +903,8 @@ function QuestionListRow({
   index: number;
   isCurrent: boolean;
   isEditing: boolean;
+  answerCount: number;
+  playerCount: number;
   onJump: () => void | Promise<void>;
   onDelete: () => void | Promise<void>;
   onEdit: () => void;
@@ -891,19 +925,51 @@ function QuestionListRow({
       <div
         className={
           "flex items-center gap-1 rounded px-1 py-1 text-sm " +
-          (isCurrent ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-200" : "")
+          (isCurrent ? "accent-bg-faded accent-text" : "")
         }
       >
         <button
           disabled={busy}
           onClick={onJump}
-          className="flex-1 text-left truncate hover:text-indigo-700 dark:hover:text-indigo-200 disabled:opacity-60 px-1"
+          className="flex-1 text-left truncate hover:opacity-80 disabled:opacity-60 px-1"
         >
           <span className="text-zinc-500 mr-2">{index + 1}.</span>
           {q.prompt}
           {q.image_url && <span className="text-zinc-500 ml-1">📷</span>}
           {q.audio_url && <span className="text-zinc-500 ml-1">🔊</span>}
         </button>
+        <span
+          className={
+            "text-xs shrink-0 mr-1 font-mono " +
+            (answerCount === 0
+              ? "text-zinc-500"
+              : answerCount === playerCount
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400")
+          }
+          title="Antall svar / antall spillere"
+        >
+          {answerCount}/{playerCount}
+        </span>
+        <span
+          className={
+            "text-xs shrink-0 mr-1 w-4 text-center " +
+            (q.revealed
+              ? "text-emerald-600 dark:text-emerald-400"
+              : answerCount > 0
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-zinc-400")
+          }
+          title={
+            q.revealed
+              ? "Avslørt"
+              : answerCount > 0
+              ? "Pågår"
+              : "Ikke startet"
+          }
+        >
+          {q.revealed ? "✓" : answerCount > 0 ? "⏳" : ""}
+        </span>
         <span className="text-xs text-zinc-500 shrink-0 mr-1">
           {typeLabel} · {q.points}p
         </span>
@@ -1049,7 +1115,7 @@ function EditQuestionForm({
             className={
               "text-xs rounded-full px-2 py-0.5 border " +
               (type === t
-                ? "bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-100"
+                ? "accent-bg-faded accent-border accent-text"
                 : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
             }
           >
@@ -1113,7 +1179,7 @@ function EditQuestionForm({
         <button
           type="submit"
           disabled={busy}
-          className="text-sm rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-3 py-1 text-white"
+          className="text-sm rounded-lg accent-bg disabled:opacity-60 px-3 py-1 text-white"
         >
           {busy ? "Lagrer…" : "Lagre"}
         </button>
@@ -1257,7 +1323,7 @@ function AddQuestionPanel({
               className={
                 "rounded-lg px-3 py-2 text-sm border " +
                 (type === t
-                  ? "bg-indigo-500/20 border-indigo-500 text-indigo-700 dark:text-indigo-100"
+                  ? "accent-bg-faded accent-border accent-text"
                   : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400")
               }
             >
@@ -1413,7 +1479,7 @@ function AddQuestionPanel({
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+          className="w-full rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium"
         >
           {busy ? "Legger til…" : "Legg til spørsmål"}
         </button>
@@ -1426,10 +1492,19 @@ function AddQuestionPanel({
 function ScoreboardPanel({
   players,
   scores,
+  questions,
+  answers,
+  roomCode,
+  call,
 }: {
   players: Player[];
   scores: Record<string, number>;
+  questions: Question[];
+  answers: Answer[];
+  roomCode: string;
+  call: (path: string, body: unknown) => Promise<unknown>;
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const sorted = [...players].sort(
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
   );
@@ -1441,36 +1516,152 @@ function ScoreboardPanel({
         <p className="text-sm text-zinc-500">Ingen spillere ennå.</p>
       ) : (
         <ol className="space-y-1">
-          {sorted.map((p, i) => (
-            <li
-              key={p.id}
-              className="flex items-center justify-between text-sm bg-zinc-50 dark:bg-zinc-950 rounded px-3 py-2 gap-2"
-            >
-              <span className="truncate">
-                <span className="text-zinc-500 mr-2">{i + 1}.</span>
-                {p.name}
-              </span>
-              <span className="flex items-center gap-3 shrink-0">
-                {p.rejoin_code && (
-                  <span className="font-mono text-xs tracking-widest text-zinc-500">
-                    {p.rejoin_code}
+          {sorted.map((p, i) => {
+            const expanded = expandedId === p.id;
+            const playerAnswers = answers.filter(
+              (a) => a.player_id === p.id,
+            );
+            return (
+              <li key={p.id} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedId(expanded ? null : p.id)
+                  }
+                  className={
+                    "w-full flex items-center justify-between text-sm rounded px-3 py-2 gap-2 text-left " +
+                    (expanded
+                      ? "accent-bg-faded"
+                      : "bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 dark:hover:bg-zinc-800/80")
+                  }
+                >
+                  <span className="truncate">
+                    <span className="text-zinc-500 mr-2">{i + 1}.</span>
+                    {p.name}
                   </span>
+                  <span className="flex items-center gap-3 shrink-0">
+                    {p.rejoin_code && (
+                      <span className="font-mono text-xs tracking-widest text-zinc-500">
+                        {p.rejoin_code}
+                      </span>
+                    )}
+                    <span className="font-mono font-semibold">
+                      {scores[p.id] ?? 0}
+                    </span>
+                  </span>
+                </button>
+                {expanded && (
+                  <div className="ml-3 pl-3 border-l border-zinc-200 dark:border-zinc-800 space-y-1 pb-2">
+                    {questions.length === 0 ? (
+                      <p className="text-xs text-zinc-500 py-1">
+                        Ingen spørsmål ennå.
+                      </p>
+                    ) : (
+                      questions.map((q, qi) => {
+                        const a = playerAnswers.find(
+                          (x) => x.question_id === q.id,
+                        );
+                        return (
+                          <PlayerAnswerRow
+                            key={q.id}
+                            question={q}
+                            qIndex={qi}
+                            answer={a}
+                            roomCode={roomCode}
+                            call={call}
+                          />
+                        );
+                      })
+                    )}
+                  </div>
                 )}
-                <span className="font-mono font-semibold">
-                  {scores[p.id] ?? 0}
-                </span>
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
       {players.length > 0 && (
         <p className="text-xs text-zinc-500">
-          Koden ved siden av navnet er spillerens kode for å fortsette – del
-          den med dem hvis de mister tilgangen.
+          Klikk på en spiller for å se og endre poeng per spørsmål.
         </p>
       )}
     </section>
+  );
+}
+
+function PlayerAnswerRow({
+  question,
+  qIndex,
+  answer,
+  roomCode,
+  call,
+}: {
+  question: Question;
+  qIndex: number;
+  answer: Answer | undefined;
+  roomCode: string;
+  call: (path: string, body: unknown) => Promise<unknown>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [pointsInput, setPointsInput] = useState<string>(
+    answer?.points_awarded == null ? "" : String(answer.points_awarded),
+  );
+
+  useEffect(() => {
+    setPointsInput(
+      answer?.points_awarded == null ? "" : String(answer.points_awarded),
+    );
+  }, [answer?.points_awarded]);
+
+  async function award(value: number) {
+    if (!answer) return;
+    setBusy(true);
+    try {
+      await call(`/api/rooms/${roomCode}/judge`, {
+        answer_id: answer.id,
+        points_awarded: value,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-xs py-1">
+      <span className="text-zinc-500 shrink-0 w-5 text-right">{qIndex + 1}.</span>
+      <span className="flex-1 min-w-0 truncate">
+        {answer ? (
+          <span className="text-zinc-800 dark:text-zinc-200">
+            {answer.answer}
+          </span>
+        ) : (
+          <span className="text-zinc-500 italic">Ingen svar</span>
+        )}
+      </span>
+      {answer ? (
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          value={pointsInput}
+          onChange={(e) => setPointsInput(e.target.value)}
+          onBlur={() => {
+            const n = parseFloat(pointsInput);
+            if (Number.isFinite(n) && n !== answer.points_awarded) {
+              award(Math.max(0, Math.min(999, n)));
+            }
+          }}
+          disabled={busy}
+          className="w-14 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+          placeholder="–"
+        />
+      ) : (
+        <span className="font-mono text-zinc-500 w-14 text-center">—</span>
+      )}
+      <span className="text-zinc-500 w-12 text-right">
+        / {question.points}
+      </span>
+    </div>
   );
 }
 
@@ -1701,7 +1892,7 @@ function SettingsPanel({
                 type="button"
                 onClick={runImport}
                 disabled={importBusy || !importText.trim()}
-                className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium text-white"
+                className="rounded-lg accent-bg disabled:opacity-60 px-4 py-2 text-sm font-medium text-white"
               >
                 {importBusy ? "Importerer…" : "Importer"}
               </button>

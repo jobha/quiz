@@ -53,17 +53,19 @@ export async function POST(
     .select("phase, current_question_id")
     .eq("code", code)
     .maybeSingle();
-  if (!room) return new NextResponse("Room not found", { status: 404 });
-  if (room.phase !== "asking") {
-    return new NextResponse("Not accepting answers", { status: 409 });
+  if (!room) return new NextResponse("Fant ikke rommet", { status: 404 });
+  if (room.phase === "ended") {
+    return new NextResponse("Quizen er ferdig", { status: 409 });
   }
   if (room.current_question_id !== questionId) {
-    return new NextResponse("Question not active", { status: 409 });
+    return new NextResponse("Spørsmålet er ikke aktivt", { status: 409 });
   }
 
   const { data: question } = await sb
     .from("questions")
-    .select("id, type, correct_answer, choices, points, tolerance, correct_answers")
+    .select(
+      "id, type, correct_answer, choices, points, tolerance, correct_answers, revealed",
+    )
     .eq("id", questionId)
     .maybeSingle();
   if (!question) return new NextResponse("Fant ikke spørsmålet", { status: 404 });
@@ -76,7 +78,11 @@ export async function POST(
     | "points"
     | "tolerance"
     | "correct_answers"
+    | "revealed"
   >;
+  if (q.revealed) {
+    return new NextResponse("Spørsmålet er allerede avslørt", { status: 409 });
+  }
 
   // Auto-grade where possible; otherwise leave for host to judge.
   let isCorrect: boolean | null = null;

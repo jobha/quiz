@@ -373,6 +373,15 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6"
       style={accentStyle}
     >
+      {room.accent_color && (
+        <div
+          aria-hidden
+          className="fixed inset-0 -z-10 pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse 1200px 480px at 50% 0%, color-mix(in srgb, ${room.accent_color} 12%, transparent), transparent 70%)`,
+          }}
+        />
+      )}
       {!previewMode && <Confetti trigger={room.phase === "ended"} />}
       {!previewMode && (
         <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
@@ -448,7 +457,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
                 className={
                   "flex items-center justify-between rounded-md px-3 py-2 text-sm gap-2 " +
                   (p.id === playerId
-                    ? "bg-indigo-500/20 text-indigo-700 dark:text-indigo-200"
+                    ? "accent-bg-faded accent-text"
                     : "bg-zinc-50 dark:bg-zinc-950")
                 }
               >
@@ -497,7 +506,7 @@ function ScoreboardForPlayers({
             className={
               "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
               (p.id === myId
-                ? "bg-indigo-500/20 text-indigo-700 dark:text-indigo-100"
+                ? "accent-bg-faded accent-text"
                 : "bg-zinc-50 dark:bg-zinc-950")
             }
           >
@@ -674,7 +683,7 @@ function QuestionView({
                     : isWrongPick
                     ? "bg-red-500/20 border-red-500 text-red-700 dark:text-red-100"
                     : chosen
-                    ? "bg-indigo-500/20 border-indigo-500"
+                    ? "accent-bg-faded accent-border"
                     : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 disabled:opacity-60")
                 }
               >

@@ -80,15 +80,43 @@ export function SortableQuestionList({
     })
   );
 
-  const ids = React.useMemo(() => questions.map((q) => q.id), [questions]);
+  const serverIds = React.useMemo(
+    () => questions.map((q) => q.id),
+    [questions],
+  );
+
+  // Optimistic override: keeps the dragged-to order on screen while the
+  // server catches up, so the row doesn't bounce back to its old slot.
+  const [optimisticIds, setOptimisticIds] = React.useState<string[] | null>(
+    null,
+  );
+  React.useEffect(() => {
+    if (
+      optimisticIds &&
+      serverIds.length === optimisticIds.length &&
+      serverIds.every((id, i) => id === optimisticIds[i])
+    ) {
+      setOptimisticIds(null);
+    }
+  }, [serverIds, optimisticIds]);
+
+  const effectiveIds = optimisticIds ?? serverIds;
+  const orderedQuestions = React.useMemo(
+    () =>
+      effectiveIds
+        .map((id) => questions.find((q) => q.id === id))
+        .filter((q): q is QuestionItem => !!q),
+    [effectiveIds, questions],
+  );
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
+    const oldIndex = effectiveIds.indexOf(String(active.id));
+    const newIndex = effectiveIds.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
-    const next = arrayMove(ids, oldIndex, newIndex);
+    const next = arrayMove(effectiveIds, oldIndex, newIndex);
+    setOptimisticIds(next);
     onReorder(next);
   }
 
@@ -98,9 +126,9 @@ export function SortableQuestionList({
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext items={effectiveIds} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-2">
-          {questions.map((q) => (
+          {orderedQuestions.map((q) => (
             <SortableRow key={q.id} item={q} />
           ))}
         </div>

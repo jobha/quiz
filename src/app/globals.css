@@ -60,11 +60,33 @@ body {
   }
 }
 
-/* Accent-tinted primary button — picks up `--accent` set on a parent. */
+/* Accent helpers — pick up `--accent` set on a parent. */
 .accent-bg {
   background-color: var(--accent);
   color: #fff;
 }
 .accent-bg:hover:not(:disabled) {
   filter: brightness(1.1);
+}
+.accent-text {
+  color: var(--accent);
+}
+.accent-border {
+  border-color: var(--accent);
+}
+.accent-bg-faded {
+  background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.accent-bg-faded-strong {
+  background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.accent-tint {
+  background:
+    radial-gradient(
+      ellipse 800px 320px at 50% 0%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent
+    ),
+    var(--bg);
+  min-height: 100vh;
 }

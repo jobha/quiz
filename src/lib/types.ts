@@ -26,6 +26,7 @@ export type Question = {
   points: number;
   image_url: string | null;
   audio_url: string | null;
+  revealed: boolean;
   created_at: string;
 };
 
