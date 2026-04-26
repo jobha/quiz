@@ -209,23 +209,44 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [code, room?.show_history]);
 
-  // Load current question whenever it changes.
+  // Load current question and subscribe to its updates (so reveal /
+  // unreveal toggled by the host propagate without a refresh).
   useEffect(() => {
     if (!room?.current_question_id) {
       setQuestion(null);
       return;
     }
     const sb = supabaseBrowser();
+    const id = room.current_question_id;
     let cancelled = false;
+
     sb.from("questions")
       .select("*")
-      .eq("id", room.current_question_id)
+      .eq("id", id)
       .maybeSingle()
       .then(({ data }) => {
         if (!cancelled && data) setQuestion(data as Question);
       });
+
+    const channel = sb
+      .channel(`question:${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "questions",
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          setQuestion(payload.new as Question);
+        },
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
+      sb.removeChannel(channel);
     };
   }, [room?.current_question_id]);
 
