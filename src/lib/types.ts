@@ -11,6 +11,8 @@ export type Room = {
   hide_rejoin_codes: boolean;
   accent_color: string | null;
   spotlight_answer_id: string | null;
+  host_avatar_emoji: string | null;
+  host_avatar_color: string | null;
   created_at: string;
 };
 

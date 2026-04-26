@@ -27,6 +27,7 @@ export async function POST(
     tolerance?: number | null;
     image_url?: string | null;
     audio_url?: string | null;
+    round_name?: string | null;
   } | null;
 
   const id = body?.id;
@@ -171,6 +172,15 @@ export async function POST(
       typeof body.audio_url === "string" && body.audio_url.trim()
         ? body.audio_url.trim()
         : null;
+  }
+
+  if (body && Object.prototype.hasOwnProperty.call(body, "round_name")) {
+    const r = body.round_name;
+    if (r === null) update.round_name = null;
+    else if (typeof r === "string") {
+      const trimmed = r.trim();
+      update.round_name = trimmed ? trimmed.slice(0, 80) : null;
+    }
   }
 
   if (Object.keys(update).length === 0) {

@@ -3,8 +3,9 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { verifyHost } from "@/lib/host-auth";
 import { normalizeRoomCode } from "@/lib/room-code";
 
-// Reorder all questions in one go. Body: { order: string[] } — full
-// list of question IDs in the new order.
+// Atomic reorder via SQL function (single transaction → fewer flickery
+// realtime events than N separate UPDATEs). Body: { order: string[] }
+// — full list of question IDs in the new order.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> },
@@ -25,26 +26,11 @@ export async function POST(
   }
 
   const sb = supabaseAdmin();
-
-  // Two-pass to avoid the unique-position constraint (if any) and to keep
-  // numbering tight: park everything at negative positions, then write
-  // final positions.
-  for (let i = 0; i < order.length; i++) {
-    const r = await sb
-      .from("questions")
-      .update({ position: -1 - i })
-      .eq("id", order[i])
-      .eq("room_code", code);
-    if (r.error) return new NextResponse(r.error.message, { status: 500 });
-  }
-  for (let i = 0; i < order.length; i++) {
-    const r = await sb
-      .from("questions")
-      .update({ position: i + 1 })
-      .eq("id", order[i])
-      .eq("room_code", code);
-    if (r.error) return new NextResponse(r.error.message, { status: 500 });
-  }
+  const { error } = await sb.rpc("reorder_questions_in_room", {
+    p_room_code: code,
+    p_ids: order,
+  });
+  if (error) return new NextResponse(error.message, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }

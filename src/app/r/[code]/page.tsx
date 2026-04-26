@@ -83,7 +83,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       const { data: roomData } = await sb
         .from("rooms")
         .select(
-          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, created_at",
+          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, created_at",
         )
         .eq("code", code)
         .maybeSingle();

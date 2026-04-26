@@ -24,6 +24,8 @@ export async function POST(
     show_history?: boolean;
     hide_rejoin_codes?: boolean;
     accent_color?: string | null;
+    host_avatar_emoji?: string | null;
+    host_avatar_color?: string | null;
   } | null;
 
   const update: Record<string, unknown> = {};
@@ -57,6 +59,24 @@ export async function POST(
       update.accent_color = null;
     } else if (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) {
       update.accent_color = c.toLowerCase();
+    } else {
+      return new NextResponse("Ugyldig farge", { status: 400 });
+    }
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, "host_avatar_emoji")) {
+    const e = body.host_avatar_emoji;
+    if (e === null) update.host_avatar_emoji = null;
+    else if (typeof e === "string" && e.trim()) {
+      update.host_avatar_emoji = e.trim().slice(0, 8);
+    } else {
+      return new NextResponse("Ugyldig emoji", { status: 400 });
+    }
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, "host_avatar_color")) {
+    const c = body.host_avatar_color;
+    if (c === null) update.host_avatar_color = null;
+    else if (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) {
+      update.host_avatar_color = c.toLowerCase();
     } else {
       return new NextResponse("Ugyldig farge", { status: 400 });
     }

@@ -56,7 +56,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [bonusByPlayer, setBonusByPlayer] = useState<Record<string, number>>({});
 
   // Reaction hooks — must run unconditionally on every render.
-  const { sendReaction, reactions } = useRoomReactions(code, null);
+  const hostSenderId = `host:${code}`;
+  const { sendReaction, reactions } = useRoomReactions(code, hostSenderId);
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -73,7 +74,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
         sb
           .from("rooms")
           .select(
-            "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, created_at",
+            "code, phase, current_question_id, host_rejoin_code, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, spotlight_answer_id, host_avatar_emoji, host_avatar_color, created_at",
           )
           .eq("code", code)
           .maybeSingle(),
