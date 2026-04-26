@@ -610,7 +610,7 @@ function QuestionView({
     }
   }, [question.id, myAnswer?.answer]);
 
-  const revealed = room.phase === "revealed";
+  const revealed = question.revealed;
   const locked = revealed; // can change answer until revealed
   const submitted = !!myAnswer;
 
