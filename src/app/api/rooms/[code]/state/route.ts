@@ -22,6 +22,8 @@ export async function POST(
     show_scoreboard?: boolean;
     show_own_score?: boolean;
     show_history?: boolean;
+    hide_rejoin_codes?: boolean;
+    accent_color?: string | null;
   } | null;
 
   const update: Record<string, unknown> = {};
@@ -42,6 +44,19 @@ export async function POST(
   }
   if (body && typeof body.show_history === "boolean") {
     update.show_history = body.show_history;
+  }
+  if (body && typeof body.hide_rejoin_codes === "boolean") {
+    update.hide_rejoin_codes = body.hide_rejoin_codes;
+  }
+  if (body && Object.prototype.hasOwnProperty.call(body, "accent_color")) {
+    const c = body.accent_color;
+    if (c === null) {
+      update.accent_color = null;
+    } else if (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c)) {
+      update.accent_color = c.toLowerCase();
+    } else {
+      return new NextResponse("Ugyldig farge", { status: 400 });
+    }
   }
   if (Object.keys(update).length === 0) {
     return new NextResponse("Nothing to update", { status: 400 });

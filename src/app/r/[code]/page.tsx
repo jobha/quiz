@@ -6,6 +6,9 @@ import { supabaseBrowser } from "@/lib/supabase-browser";
 import { normalizeRoomCode } from "@/lib/room-code";
 import type { Answer, Player, Question, Room } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Confetti } from "@/components/Confetti";
+import { AudioClue } from "@/components/AudioClue";
+import { useTypingBroadcast } from "@/lib/typing-presence";
 
 type Params = { code: string };
 
@@ -50,7 +53,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       const { data: roomData } = await sb
         .from("rooms")
         .select(
-          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, created_at",
+          "code, phase, current_question_id, show_scoreboard, show_own_score, show_history, hide_rejoin_codes, accent_color, created_at",
         )
         .eq("code", code)
         .maybeSingle();
@@ -361,8 +364,15 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     );
   }
 
+  const accentStyle = room.accent_color
+    ? ({ ["--accent" as never]: room.accent_color } as React.CSSProperties)
+    : undefined;
   return (
-    <main className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6">
+    <main
+      className="min-h-screen p-6 pb-24 max-w-2xl mx-auto space-y-6"
+      style={accentStyle}
+    >
+      <Confetti trigger={room.phase === "ended"} />
       <ThemeToggle className="fixed right-4 bottom-4 sm:top-4 sm:bottom-auto z-10" />
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -411,6 +421,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           players={players}
           scores={allScores}
           myId={playerId}
+          hideCodes={room.hide_rejoin_codes}
         />
       ) : (
         <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
@@ -429,7 +440,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
                 }
               >
                 <span className="truncate">{p.name}</span>
-                {p.rejoin_code && (
+                {!room.hide_rejoin_codes && p.rejoin_code && (
                   <span className="font-mono text-xs tracking-widest text-zinc-500 shrink-0">
                     {p.rejoin_code}
                   </span>
@@ -437,10 +448,12 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
               </li>
             ))}
           </ul>
-          <p className="text-xs text-zinc-500 mt-3">
-            Koden ved siden av navnet er spillerens kode for å fortsette –
-            del den hvis noen blir kastet ut.
-          </p>
+          {!room.hide_rejoin_codes && (
+            <p className="text-xs text-zinc-500 mt-3">
+              Koden ved siden av navnet er spillerens kode for å fortsette –
+              del den hvis noen blir kastet ut.
+            </p>
+          )}
         </section>
       )}
     </main>
@@ -451,10 +464,12 @@ function ScoreboardForPlayers({
   players,
   scores,
   myId,
+  hideCodes,
 }: {
   players: Player[];
   scores: Record<string, number>;
   myId: string;
+  hideCodes: boolean;
 }) {
   const sorted = [...players].sort(
     (a, b) => (scores[b.id] ?? 0) - (scores[a.id] ?? 0),
@@ -478,7 +493,7 @@ function ScoreboardForPlayers({
               {p.name}
             </span>
             <span className="flex items-center gap-3 shrink-0">
-              {p.rejoin_code && (
+              {!hideCodes && p.rejoin_code && (
                 <span className="font-mono text-xs tracking-widest text-zinc-500">
                   {p.rejoin_code}
                 </span>
@@ -557,18 +572,20 @@ function QuestionView({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastQuestionId = useRef<string | null>(null);
+  const { signalTyping } = useTypingBroadcast(code, playerId);
 
+  // Reset draft when question changes; preload draft from existing answer.
   useEffect(() => {
     if (lastQuestionId.current !== question.id) {
-      setText("");
+      setText(myAnswer?.answer ?? "");
       setError(null);
       lastQuestionId.current = question.id;
     }
-  }, [question.id]);
+  }, [question.id, myAnswer?.answer]);
 
   const revealed = room.phase === "revealed";
+  const locked = revealed; // can change answer until revealed
   const submitted = !!myAnswer;
-  const locked = revealed || submitted;
 
   async function submit(answer: string) {
     if (!answer.trim()) return;
@@ -592,6 +609,13 @@ function QuestionView({
     }
   }
 
+  const correctAnswerDisplay =
+    question.type === "multi" && question.correct_answers
+      ? question.correct_answers.join(", ")
+      : question.type === "numeric" && question.tolerance
+      ? `${question.correct_answer} (±${question.tolerance})`
+      : question.correct_answer;
+
   return (
     <section className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5">
       <div>
@@ -605,6 +629,11 @@ function QuestionView({
             alt=""
             className="mt-3 max-h-72 w-full object-contain rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
           />
+        )}
+        {question.audio_url && (
+          <div className="mt-3">
+            <AudioClue src={question.audio_url} />
+          </div>
         )}
       </div>
 
@@ -636,6 +665,35 @@ function QuestionView({
             );
           })}
         </div>
+      ) : question.type === "multi" ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(text);
+          }}
+          className="space-y-3"
+        >
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              signalTyping();
+            }}
+            disabled={locked || submitting}
+            rows={4}
+            placeholder="Ett svar per linje"
+            className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-70 font-mono text-sm"
+          />
+          {!locked && (
+            <button
+              type="submit"
+              disabled={submitting || !text.trim()}
+              className="w-full rounded-lg accent-bg disabled:opacity-60 px-4 py-3 font-medium"
+            >
+              {submitting ? "Sender…" : submitted ? "Oppdater svar" : "Send"}
+            </button>
+          )}
+        </form>
       ) : (
         <form
           onSubmit={(e) => {
@@ -645,19 +703,26 @@ function QuestionView({
           className="space-y-3"
         >
           <input
-            value={submitted ? myAnswer!.answer : text}
-            onChange={(e) => setText(e.target.value)}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              signalTyping();
+            }}
             disabled={locked || submitting}
-            placeholder="Skriv svaret ditt"
+            type={question.type === "numeric" ? "number" : "text"}
+            step={question.type === "numeric" ? "any" : undefined}
+            placeholder={
+              question.type === "numeric" ? "Skriv et tall" : "Skriv svaret ditt"
+            }
             className="w-full rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-70"
           />
           {!locked && (
             <button
               type="submit"
               disabled={submitting || !text.trim()}
-              className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium"
+              className="w-full rounded-lg accent-bg disabled:opacity-60 px-4 py-3 font-medium"
             >
-              {submitting ? "Sender…" : "Send"}
+              {submitting ? "Sender…" : submitted ? "Oppdater svar" : "Send"}
             </button>
           )}
         </form>
@@ -665,16 +730,20 @@ function QuestionView({
 
       {submitted && !revealed && (
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Svaret er låst. Venter på at quizmasteren avslører…
+          Svaret er sendt. Du kan endre det helt frem til quizmasteren
+          avslører.
         </p>
       )}
 
       {revealed && (
-        <div className="rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 space-y-1">
+        <div
+          key={question.id}
+          className="reveal-card rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-4 space-y-1"
+        >
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
             Riktig svar
           </p>
-          <p className="font-medium">{question.correct_answer}</p>
+          <p className="font-medium">{correctAnswerDisplay}</p>
           {myAnswer ? (
             <ResultLine answer={myAnswer} maxPoints={question.points} />
           ) : (
@@ -779,21 +848,27 @@ function ResultLine({
   const pa = answer.points_awarded;
   if (pa === null || pa === undefined) {
     return (
-      <p className="text-sm mt-2 text-zinc-600 dark:text-zinc-400">
+      <p className="result-line text-sm mt-2 text-zinc-600 dark:text-zinc-400">
         Venter på dom fra quizmasteren…
       </p>
     );
   }
   if (pa === 0) {
-    return <p className="text-sm mt-2 text-red-400">Ikke helt.</p>;
+    return (
+      <p className="result-line text-sm mt-2 text-red-500 dark:text-red-400">
+        Ikke helt.
+      </p>
+    );
   }
   if (pa === maxPoints) {
     return (
-      <p className="text-sm mt-2 text-emerald-400">Riktig! +{pa}</p>
+      <p className="result-line text-sm mt-2 text-emerald-600 dark:text-emerald-400">
+        Riktig! +{pa}
+      </p>
     );
   }
   return (
-    <p className="text-sm mt-2 text-amber-300">
+    <p className="result-line text-sm mt-2 text-amber-600 dark:text-amber-300">
       Delvis riktig! +{pa}
     </p>
   );

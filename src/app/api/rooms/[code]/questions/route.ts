@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { verifyHost } from "@/lib/host-auth";
 import { normalizeRoomCode } from "@/lib/room-code";
 
+const VALID_TYPES = new Set(["text", "choice", "numeric", "multi"]);
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> },
@@ -15,12 +17,15 @@ export async function POST(
   }
 
   const body = (await req.json().catch(() => null)) as {
-    type?: "text" | "choice";
+    type?: string;
     prompt?: string;
     correct_answer?: string;
+    correct_answers?: string[] | null;
     choices?: string[] | null;
     points?: number;
+    tolerance?: number | null;
     image_url?: string | null;
+    audio_url?: string | null;
   } | null;
 
   const type = body?.type;
@@ -33,18 +38,27 @@ export async function POST(
     typeof body?.image_url === "string" && body.image_url.trim()
       ? body.image_url.trim()
       : null;
+  const audioUrl =
+    typeof body?.audio_url === "string" && body.audio_url.trim()
+      ? body.audio_url.trim()
+      : null;
 
-  if (!type || (type !== "text" && type !== "choice")) {
+  if (!type || !VALID_TYPES.has(type)) {
     return new NextResponse("Ugyldig type", { status: 400 });
   }
-  if (!prompt || !correct) {
-    return new NextResponse("Mangler spørsmål eller riktig svar", {
-      status: 400,
-    });
+  if (!prompt) {
+    return new NextResponse("Mangler spørsmålstekst", { status: 400 });
   }
 
   let choices: string[] | null = null;
+  let correctAnswers: string[] | null = null;
+  let tolerance: number | null = null;
+  let canonicalCorrect = correct ?? "";
+
   if (type === "choice") {
+    if (!correct) {
+      return new NextResponse("Mangler riktig svar", { status: 400 });
+    }
     choices = (body?.choices ?? []).map((s) => s.trim()).filter(Boolean);
     if (choices.length < 2) {
       return new NextResponse("Trenger minst to alternativer", { status: 400 });
@@ -53,6 +67,43 @@ export async function POST(
       return new NextResponse("Riktig svar må være ett av alternativene", {
         status: 400,
       });
+    }
+  } else if (type === "multi") {
+    correctAnswers = (body?.correct_answers ?? [])
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter(Boolean);
+    if (correctAnswers.length < 1) {
+      return new NextResponse(
+        "Trenger minst ett gyldig svar for flere-svar-spørsmål",
+        { status: 400 },
+      );
+    }
+    canonicalCorrect = correctAnswers[0];
+  } else if (type === "numeric") {
+    if (!correct) {
+      return new NextResponse("Mangler riktig svar", { status: 400 });
+    }
+    const n = parseFloat(correct);
+    if (!Number.isFinite(n)) {
+      return new NextResponse("Riktig svar må være et tall", { status: 400 });
+    }
+    if (
+      body &&
+      Object.prototype.hasOwnProperty.call(body, "tolerance") &&
+      body.tolerance !== null
+    ) {
+      const t = Number(body.tolerance);
+      if (!Number.isFinite(t) || t < 0) {
+        return new NextResponse("Toleranse må være ≥ 0", { status: 400 });
+      }
+      tolerance = t;
+    } else {
+      tolerance = 0;
+    }
+  } else {
+    // text
+    if (!correct) {
+      return new NextResponse("Mangler riktig svar", { status: 400 });
     }
   }
 
@@ -70,10 +121,13 @@ export async function POST(
       position,
       type,
       prompt,
-      correct_answer: correct,
+      correct_answer: canonicalCorrect,
+      correct_answers: correctAnswers,
+      tolerance,
       choices,
       points,
       image_url: imageUrl,
+      audio_url: audioUrl,
     })
     .select("id")
     .single();

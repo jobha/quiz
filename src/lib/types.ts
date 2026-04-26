@@ -1,5 +1,5 @@
 export type Phase = "lobby" | "asking" | "revealed" | "ended";
-export type QuestionType = "text" | "choice";
+export type QuestionType = "text" | "choice" | "numeric" | "multi";
 
 export type Room = {
   code: string;
@@ -8,6 +8,8 @@ export type Room = {
   show_scoreboard: boolean;
   show_own_score: boolean;
   show_history: boolean;
+  hide_rejoin_codes: boolean;
+  accent_color: string | null;
   created_at: string;
 };
 
@@ -19,8 +21,11 @@ export type Question = {
   prompt: string;
   choices: string[] | null;
   correct_answer: string;
+  correct_answers: string[] | null; // for type='multi'
+  tolerance: number | null;          // for type='numeric'
   points: number;
   image_url: string | null;
+  audio_url: string | null;
   created_at: string;
 };
 

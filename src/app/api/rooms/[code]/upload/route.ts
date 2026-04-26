@@ -3,8 +3,20 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 import { verifyHost } from "@/lib/host-auth";
 import { normalizeRoomCode } from "@/lib/room-code";
 
-const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-const MAX_BYTES = 5 * 1024 * 1024;
+const ALLOWED = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/webm",
+  "audio/ogg",
+  "audio/x-m4a",
+  "audio/m4a",
+]);
+const MAX_BYTES = 10 * 1024 * 1024;
 
 export async function POST(
   req: NextRequest,
