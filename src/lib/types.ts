@@ -18,6 +18,7 @@ export type Question = {
   choices: string[] | null;
   correct_answer: string;
   points: number;
+  image_url: string | null;
   created_at: string;
 };
 
@@ -36,5 +37,6 @@ export type Answer = {
   player_id: string;
   answer: string;
   is_correct: boolean | null;
+  points_awarded: number | null;
   submitted_at: string;
 };

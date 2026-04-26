@@ -25,7 +25,6 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [hostSecret, setHostSecret] = useState<string | null>(null);
   const storageKey = `quiz:host:${code}`;
 
-  // Restore secret from URL or localStorage; persist for next visit.
   useEffect(() => {
     const fromUrl = searchParams.get("k");
     if (fromUrl) {
@@ -47,7 +46,6 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [answers, setAnswers] = useState<Answer[]>([]);
 
-  // Load + subscribe to all room data.
   useEffect(() => {
     const sb = supabaseBrowser();
     let cancelled = false;
@@ -157,7 +155,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   }, [code]);
 
   async function call(path: string, body: unknown) {
-    if (!hostSecret) throw new Error("No host secret");
+    if (!hostSecret) throw new Error("Mangler vertskode");
     const res = await fetch(path, {
       method: "POST",
       headers: {
@@ -168,6 +166,20 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
+  }
+
+  async function uploadFile(file: File): Promise<string> {
+    if (!hostSecret) throw new Error("Mangler vertskode");
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`/api/rooms/${code}/upload`, {
+      method: "POST",
+      headers: { "x-host-secret": hostSecret },
+      body: form,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const json = (await res.json()) as { url: string };
+    return json.url;
   }
 
   const currentQuestion = useMemo(
@@ -184,22 +196,20 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   );
 
   const scores = useMemo(() => {
-    const byQ: Record<string, Question> = {};
-    for (const q of questions) byQ[q.id] = q;
     const out: Record<string, number> = {};
     for (const p of players) out[p.id] = 0;
     for (const a of answers) {
-      if (a.is_correct) {
-        out[a.player_id] = (out[a.player_id] ?? 0) + (byQ[a.question_id]?.points ?? 1);
+      if (typeof a.points_awarded === "number") {
+        out[a.player_id] = (out[a.player_id] ?? 0) + a.points_awarded;
       }
     }
     return out;
-  }, [answers, players, questions]);
+  }, [answers, players]);
 
   if (!room) {
     return (
       <Centered>
-        <p className="text-zinc-400">Loading room…</p>
+        <p className="text-zinc-400">Laster rom…</p>
       </Centered>
     );
   }
@@ -208,11 +218,11 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
     return (
       <Centered>
         <div className="max-w-md text-center space-y-3">
-          <h1 className="text-2xl font-bold">Host link required</h1>
+          <h1 className="text-2xl font-bold">Trenger vertslenke</h1>
           <p className="text-zinc-400 text-sm">
-            This page needs the secret host key. Open the original link you
-            were given when you created the room (it has <code>?k=…</code> at
-            the end).
+            Denne siden krever den hemmelige vertskoden. Åpne lenken du fikk
+            da du laget rommet (den slutter med <code>?k=…</code>), eller
+            bruk &quot;Fortsett med en kode&quot; på forsiden.
           </p>
         </div>
       </Centered>
@@ -228,13 +238,13 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
-            Hosting room
+            Quizmaster for rom
           </p>
           <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
             {code}
           </h1>
           <p className="text-sm text-zinc-400 mt-1">
-            Players join at{" "}
+            Spillere blir med på{" "}
             <button
               onClick={() => navigator.clipboard.writeText(playerLink)}
               className="underline underline-offset-4 hover:text-zinc-100"
@@ -244,7 +254,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           </p>
           {room.host_rejoin_code && (
             <p className="text-sm text-zinc-400 mt-1">
-              Host rejoin code:{" "}
+              Din quizmasterkode:{" "}
               <span className="font-mono tracking-widest text-zinc-200">
                 {room.host_rejoin_code}
               </span>
@@ -252,9 +262,9 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           )}
         </div>
         <div className="text-right text-xs text-zinc-500">
-          <p>Phase: <span className="text-zinc-300">{room.phase}</span></p>
-          <p>Players: <span className="text-zinc-300">{players.length}</span></p>
-          <p>Questions: <span className="text-zinc-300">{questions.length}</span></p>
+          <p>Fase: <span className="text-zinc-300">{translatePhase(room.phase)}</span></p>
+          <p>Spillere: <span className="text-zinc-300">{players.length}</span></p>
+          <p>Spørsmål: <span className="text-zinc-300">{questions.length}</span></p>
         </div>
       </header>
 
@@ -271,8 +281,8 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           <QuestionListPanel
             questions={questions}
             currentId={room.current_question_id}
-            phase={room.phase}
             call={call}
+            roomCode={code}
           />
         </div>
 
@@ -280,6 +290,7 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
           <AddQuestionPanel
             existingCount={questions.length}
             call={call}
+            uploadFile={uploadFile}
           />
           <ScoreboardPanel
             room={room}
@@ -293,6 +304,21 @@ export default function HostPage({ params }: { params: Promise<Params> }) {
   );
 }
 
+function translatePhase(phase: string): string {
+  switch (phase) {
+    case "lobby":
+      return "venterom";
+    case "asking":
+      return "spør";
+    case "revealed":
+      return "avslørt";
+    case "ended":
+      return "ferdig";
+    default:
+      return phase;
+  }
+}
+
 function CurrentQuestionPanel({
   room,
   question,
@@ -301,7 +327,7 @@ function CurrentQuestionPanel({
   players,
   call,
 }: {
-  room: Room;
+  room: RoomWithHostCode;
   question: Question | null;
   questions: Question[];
   answers: Answer[];
@@ -317,7 +343,7 @@ function CurrentQuestionPanel({
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      setError(e instanceof Error ? e.message : "Noe gikk galt");
     } finally {
       setBusy(null);
     }
@@ -326,25 +352,79 @@ function CurrentQuestionPanel({
   const idx = question
     ? questions.findIndex((q) => q.id === question.id)
     : -1;
+  const prev = idx > 0 ? questions[idx - 1] : null;
   const next = idx >= 0 ? questions[idx + 1] : questions[0];
   const playerById = Object.fromEntries(players.map((p) => [p.id, p]));
+
+  if (room.phase === "ended") {
+    return (
+      <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
+        <h2 className="font-semibold">Quizen er ferdig</h2>
+        <p className="text-sm text-zinc-400">
+          Vil du fortsette? Du kan hoppe tilbake til et tidligere spørsmål
+          eller gå tilbake til venterommet.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {questions.length > 0 && (
+            <button
+              onClick={() =>
+                run("resume", () =>
+                  call(`/api/rooms/${room.code}/state`, {
+                    phase: "revealed",
+                    current_question_id:
+                      room.current_question_id ?? questions[questions.length - 1].id,
+                  }),
+                )
+              }
+              disabled={busy !== null}
+              className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+            >
+              Fortsett quizen
+            </button>
+          )}
+          <button
+            onClick={() =>
+              run("lobby", () =>
+                call(`/api/rooms/${room.code}/state`, {
+                  phase: "lobby",
+                  current_question_id: null,
+                }),
+              )
+            }
+            disabled={busy !== null}
+            className="rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-4 py-2 text-sm font-medium"
+          >
+            Tilbake til venterom
+          </button>
+        </div>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Current question</h2>
-        <span className="text-xs text-zinc-500">{room.phase}</span>
+        <h2 className="font-semibold">Nåværende spørsmål</h2>
+        <span className="text-xs text-zinc-500">{translatePhase(room.phase)}</span>
       </div>
 
       {question ? (
         <>
           <div>
             <p className="text-xs text-zinc-500">
-              #{idx + 1} of {questions.length}
+              #{idx + 1} av {questions.length}
             </p>
             <p className="text-lg font-medium mt-1">{question.prompt}</p>
+            {question.image_url && (
+              <img
+                src={question.image_url}
+                alt=""
+                className="mt-2 max-h-56 w-full object-contain rounded-lg bg-zinc-950 border border-zinc-800"
+              />
+            )}
             <p className="text-sm text-emerald-400 mt-1">
-              Answer: {question.correct_answer}
+              Svar: {question.correct_answer}
             </p>
             {question.type === "choice" && question.choices && (
               <ul className="mt-2 text-sm text-zinc-400 list-disc pl-5">
@@ -362,73 +442,43 @@ function CurrentQuestionPanel({
 
           <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-3">
             <p className="text-xs text-zinc-500 uppercase tracking-widest mb-2">
-              Answers ({answers.length}/{players.length})
+              Svar ({answers.length}/{players.length})
             </p>
             {answers.length === 0 ? (
-              <p className="text-sm text-zinc-500">No answers yet.</p>
+              <p className="text-sm text-zinc-500">Ingen svar ennå.</p>
             ) : (
-              <ul className="space-y-1">
-                {answers.map((a) => {
-                  const player = playerById[a.player_id];
-                  return (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between gap-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <span className="text-zinc-400">
-                          {player?.name ?? "?"}
-                        </span>{" "}
-                        <span className="font-medium">{a.answer}</span>
-                      </div>
-                      {room.phase === "revealed" && (
-                        <div className="flex gap-1 shrink-0">
-                          <button
-                            onClick={() =>
-                              run("judge", () =>
-                                call(`/api/rooms/${room.code}/judge`, {
-                                  answer_id: a.id,
-                                  is_correct: true,
-                                }),
-                              )
-                            }
-                            className={
-                              "px-2 py-0.5 text-xs rounded " +
-                              (a.is_correct === true
-                                ? "bg-emerald-500 text-white"
-                                : "bg-zinc-800 text-zinc-300 hover:bg-emerald-500/30")
-                            }
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={() =>
-                              run("judge", () =>
-                                call(`/api/rooms/${room.code}/judge`, {
-                                  answer_id: a.id,
-                                  is_correct: false,
-                                }),
-                              )
-                            }
-                            className={
-                              "px-2 py-0.5 text-xs rounded " +
-                              (a.is_correct === false
-                                ? "bg-red-500 text-white"
-                                : "bg-zinc-800 text-zinc-300 hover:bg-red-500/30")
-                            }
-                          >
-                            ✗
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
+              <ul className="space-y-2">
+                {answers.map((a) => (
+                  <AnswerRow
+                    key={a.id}
+                    answer={a}
+                    playerName={playerById[a.player_id]?.name ?? "?"}
+                    maxPoints={question?.points ?? 1}
+                    roomCode={room.code}
+                    call={call}
+                  />
+                ))}
               </ul>
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {prev && (
+              <button
+                onClick={() =>
+                  run("prev", () =>
+                    call(`/api/rooms/${room.code}/state`, {
+                      phase: "revealed",
+                      current_question_id: prev.id,
+                    }),
+                  )
+                }
+                disabled={busy !== null}
+                className="rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-3 py-2 text-sm"
+              >
+                ← Forrige
+              </button>
+            )}
             {room.phase === "asking" && (
               <button
                 onClick={() =>
@@ -439,7 +489,7 @@ function CurrentQuestionPanel({
                 disabled={busy !== null}
                 className="rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-60 px-4 py-2 text-sm font-medium text-zinc-950"
               >
-                Reveal answer
+                Avslør svar
               </button>
             )}
             {room.phase === "revealed" && next && (
@@ -455,7 +505,7 @@ function CurrentQuestionPanel({
                 disabled={busy !== null}
                 className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
               >
-                Next question →
+                Neste spørsmål →
               </button>
             )}
             {room.phase === "revealed" && !next && (
@@ -468,7 +518,7 @@ function CurrentQuestionPanel({
                 disabled={busy !== null}
                 className="rounded-lg bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60 px-4 py-2 text-sm font-medium"
               >
-                End quiz
+                Avslutt quiz
               </button>
             )}
           </div>
@@ -477,8 +527,8 @@ function CurrentQuestionPanel({
         <div className="space-y-3">
           <p className="text-sm text-zinc-400">
             {questions.length === 0
-              ? "Add a question to get started."
-              : "Ready when you are."}
+              ? "Legg til et spørsmål for å starte."
+              : "Klar når du er det."}
           </p>
           {questions.length > 0 && (
             <button
@@ -493,7 +543,7 @@ function CurrentQuestionPanel({
               disabled={busy !== null}
               className="rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
             >
-              Start with question 1
+              Start med spørsmål 1
             </button>
           )}
         </div>
@@ -504,64 +554,269 @@ function CurrentQuestionPanel({
   );
 }
 
-function QuestionListPanel({
-  questions,
-  currentId,
-  phase,
+function AnswerRow({
+  answer,
+  playerName,
+  maxPoints,
+  roomCode,
   call,
 }: {
-  questions: Question[];
-  currentId: string | null;
-  phase: string;
+  answer: Answer;
+  playerName: string;
+  maxPoints: number;
+  roomCode: string;
   call: (path: string, body: unknown) => Promise<unknown>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [pointsInput, setPointsInput] = useState<string>(
+    answer.points_awarded === null || answer.points_awarded === undefined
+      ? ""
+      : String(answer.points_awarded),
+  );
+
+  // Keep the input synced if the row updates remotely.
+  useEffect(() => {
+    setPointsInput(
+      answer.points_awarded === null || answer.points_awarded === undefined
+        ? ""
+        : String(answer.points_awarded),
+    );
+  }, [answer.points_awarded]);
+
+  async function award(value: number) {
+    setBusy(true);
+    try {
+      await call(`/api/rooms/${roomCode}/judge`, {
+        answer_id: answer.id,
+        points_awarded: value,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const fullChosen = answer.points_awarded === maxPoints;
+  const zeroChosen = answer.points_awarded === 0;
+  const half = Math.floor(maxPoints / 2);
+  const halfChosen =
+    answer.points_awarded === half &&
+    answer.points_awarded !== null &&
+    answer.points_awarded !== maxPoints &&
+    answer.points_awarded !== 0;
+
+  return (
+    <li className="flex items-center justify-between gap-2 text-sm">
+      <div className="min-w-0">
+        <span className="text-zinc-400">{playerName}</span>{" "}
+        <span className="font-medium">{answer.answer}</span>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          disabled={busy}
+          onClick={() => award(maxPoints)}
+          className={
+            "px-2 py-0.5 text-xs rounded " +
+            (fullChosen
+              ? "bg-emerald-500 text-white"
+              : "bg-zinc-800 text-zinc-300 hover:bg-emerald-500/30")
+          }
+          title={`Full pott (${maxPoints})`}
+        >
+          ✓
+        </button>
+        {maxPoints > 1 && (
+          <button
+            disabled={busy}
+            onClick={() => award(half)}
+            className={
+              "px-2 py-0.5 text-xs rounded " +
+              (halfChosen
+                ? "bg-amber-500 text-zinc-900"
+                : "bg-zinc-800 text-zinc-300 hover:bg-amber-500/30")
+            }
+            title={`Halv pott (${half})`}
+          >
+            ½
+          </button>
+        )}
+        <button
+          disabled={busy}
+          onClick={() => award(0)}
+          className={
+            "px-2 py-0.5 text-xs rounded " +
+            (zeroChosen
+              ? "bg-red-500 text-white"
+              : "bg-zinc-800 text-zinc-300 hover:bg-red-500/30")
+          }
+          title="Null poeng"
+        >
+          ✗
+        </button>
+        <input
+          type="number"
+          min={0}
+          max={maxPoints}
+          value={pointsInput}
+          onChange={(e) => setPointsInput(e.target.value)}
+          onBlur={() => {
+            const n = parseInt(pointsInput, 10);
+            if (Number.isFinite(n) && n !== answer.points_awarded) {
+              award(Math.max(0, Math.min(maxPoints, n)));
+            }
+          }}
+          disabled={busy}
+          className="w-12 rounded bg-zinc-950 border border-zinc-800 px-1 py-0.5 text-xs font-mono text-center"
+          placeholder="–"
+        />
+      </div>
+    </li>
+  );
+}
+
+function QuestionListPanel({
+  questions,
+  currentId,
+  call,
+  roomCode,
+}: {
+  questions: Question[];
+  currentId: string | null;
+  call: (path: string, body: unknown) => Promise<unknown>;
+  roomCode: string;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function clone() {
+    if (!confirm("Lage en ny quiz med de samme spørsmålene?")) return;
+    setCloning(true);
+    setError(null);
+    try {
+      const res = (await call(`/api/rooms/${roomCode}/clone`, {})) as {
+        code: string;
+        host_secret: string;
+      };
+      window.open(`/r/${res.code}/host?k=${res.host_secret}`, "_blank");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Klarte ikke å klone quizen");
+    } finally {
+      setCloning(false);
+    }
+  }
+
   if (questions.length === 0) return null;
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
-      <h2 className="font-semibold">All questions</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-semibold">Alle spørsmål</h2>
+        <button
+          onClick={clone}
+          disabled={cloning}
+          className="text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 px-3 py-1.5"
+          title="Lag en ny quiz med kopier av alle spørsmål"
+        >
+          {cloning ? "Kloner…" : "📄 Lag ny quiz fra disse"}
+        </button>
+      </div>
+      <p className="text-xs text-zinc-500">
+        Klikk på spørsmålet for å hoppe dit. Spillerne ser det med en gang.
+      </p>
       <ol className="space-y-1">
         {questions.map((q, i) => {
           const isCurrent = q.id === currentId;
+          const isFirst = i === 0;
+          const isLast = i === questions.length - 1;
           return (
             <li
               key={q.id}
               className={
-                "flex items-center justify-between gap-2 rounded px-2 py-1 text-sm " +
+                "flex items-center gap-1 rounded px-1 py-1 text-sm " +
                 (isCurrent ? "bg-indigo-500/15 text-indigo-200" : "")
               }
             >
-              <span className="truncate">
+              <button
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy(q.id);
+                  try {
+                    await call(`/api/rooms/${roomCode}/state`, {
+                      phase: "revealed",
+                      current_question_id: q.id,
+                    });
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="flex-1 text-left truncate hover:text-indigo-200 disabled:opacity-60 px-1"
+              >
                 <span className="text-zinc-500 mr-2">{i + 1}.</span>
                 {q.prompt}
+                {q.image_url && <span className="text-zinc-500 ml-1">📷</span>}
+              </button>
+              <span className="text-xs text-zinc-500 shrink-0 mr-1">
+                {q.type === "choice" ? "MC" : "fritekst"} · {q.points}p
               </span>
-              <span className="text-xs text-zinc-500 shrink-0">
-                {q.type === "choice" ? "MC" : "free"} · {q.points}p
-              </span>
-              {phase === "lobby" && !isCurrent && (
-                <button
-                  disabled={busy}
-                  onClick={async () => {
-                    if (!confirm("Delete this question?")) return;
-                    setBusy(true);
-                    try {
-                      await call(
-                        `/api/rooms/${q.room_code}/questions/delete`,
-                        { id: q.id },
-                      );
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  className="text-xs text-zinc-500 hover:text-red-400"
-                >
-                  delete
-                </button>
-              )}
+              <button
+                disabled={busy !== null || isFirst}
+                onClick={async () => {
+                  setBusy(q.id);
+                  try {
+                    await call(`/api/rooms/${roomCode}/questions/reorder`, {
+                      id: q.id,
+                      direction: "up",
+                    });
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="text-xs px-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                title="Flytt opp"
+              >
+                ↑
+              </button>
+              <button
+                disabled={busy !== null || isLast}
+                onClick={async () => {
+                  setBusy(q.id);
+                  try {
+                    await call(`/api/rooms/${roomCode}/questions/reorder`, {
+                      id: q.id,
+                      direction: "down",
+                    });
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="text-xs px-1 text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                title="Flytt ned"
+              >
+                ↓
+              </button>
+              <button
+                disabled={busy !== null}
+                onClick={async () => {
+                  if (!confirm("Slette dette spørsmålet?")) return;
+                  setBusy(q.id);
+                  try {
+                    await call(
+                      `/api/rooms/${q.room_code}/questions/delete`,
+                      { id: q.id },
+                    );
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+                className="text-xs px-1 text-zinc-500 hover:text-red-400"
+                title="Slett spørsmål"
+              >
+                🗑
+              </button>
             </li>
           );
         })}
       </ol>
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
   );
 }
@@ -569,15 +824,19 @@ function QuestionListPanel({
 function AddQuestionPanel({
   existingCount,
   call,
+  uploadFile,
 }: {
   existingCount: number;
   call: (path: string, body: unknown) => Promise<unknown>;
+  uploadFile: (file: File) => Promise<string>;
 }) {
   const [type, setType] = useState<QuestionType>("text");
   const [prompt, setPrompt] = useState("");
   const [correct, setCorrect] = useState("");
   const [choicesText, setChoicesText] = useState("");
   const [points, setPoints] = useState(1);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
@@ -586,6 +845,12 @@ function AddQuestionPanel({
     const m = window.location.pathname.match(/\/r\/([^/]+)\/host/);
     setCode(m?.[1] ?? null);
   }, []);
+
+  function handleFile(file: File | null) {
+    setImageFile(file);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(file ? URL.createObjectURL(file) : null);
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -601,24 +866,32 @@ function AddQuestionPanel({
               .filter(Boolean)
           : null;
       if (type === "choice" && (!choices || choices.length < 2)) {
-        throw new Error("Add at least two choices, one per line.");
+        throw new Error("Legg til minst to alternativer, ett per linje.");
       }
       if (type === "choice" && choices && !choices.includes(correct.trim())) {
-        throw new Error("The correct answer must match one of the choices.");
+        throw new Error("Riktig svar må være ett av alternativene.");
       }
+
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        imageUrl = await uploadFile(imageFile);
+      }
+
       await call(`/api/rooms/${code}/questions`, {
         type,
         prompt: prompt.trim(),
         correct_answer: correct.trim(),
         choices,
         points,
+        image_url: imageUrl,
       });
       setPrompt("");
       setCorrect("");
       setChoicesText("");
       setPoints(1);
+      handleFile(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add question");
+      setError(e instanceof Error ? e.message : "Klarte ikke å legge til spørsmål");
     } finally {
       setBusy(false);
     }
@@ -626,7 +899,7 @@ function AddQuestionPanel({
 
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
-      <h2 className="font-semibold">Add question #{existingCount + 1}</h2>
+      <h2 className="font-semibold">Legg til spørsmål #{existingCount + 1}</h2>
       <form onSubmit={add} className="space-y-3">
         <div className="flex gap-2">
           <button
@@ -639,7 +912,7 @@ function AddQuestionPanel({
                 : "bg-zinc-950 border-zinc-800 text-zinc-400")
             }
           >
-            Free text
+            Fritekst
           </button>
           <button
             type="button"
@@ -651,24 +924,43 @@ function AddQuestionPanel({
                 : "bg-zinc-950 border-zinc-800 text-zinc-400")
             }
           >
-            Multiple choice
+            Flervalg
           </button>
         </div>
 
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Question prompt"
+          placeholder="Spørsmålstekst"
           rows={2}
           className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           required
         />
 
+        <div className="space-y-2">
+          <label className="block text-xs text-zinc-500">
+            Bilde (valgfritt, maks 5 MB)
+          </label>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm text-zinc-300 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-zinc-200 hover:file:bg-zinc-700"
+          />
+          {imagePreview && (
+            <img
+              src={imagePreview}
+              alt="forhåndsvisning"
+              className="max-h-40 rounded-md border border-zinc-800"
+            />
+          )}
+        </div>
+
         {type === "choice" && (
           <textarea
             value={choicesText}
             onChange={(e) => setChoicesText(e.target.value)}
-            placeholder={"Choices, one per line\nParis\nLondon\nBerlin"}
+            placeholder={"Alternativer, ett per linje\nOslo\nBergen\nTrondheim"}
             rows={4}
             className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono"
             required
@@ -678,13 +970,13 @@ function AddQuestionPanel({
         <input
           value={correct}
           onChange={(e) => setCorrect(e.target.value)}
-          placeholder="Correct answer"
+          placeholder="Riktig svar"
           className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 outline-none focus:border-indigo-500 text-sm"
           required
         />
 
         <div className="flex items-center gap-3">
-          <label className="text-sm text-zinc-400">Points</label>
+          <label className="text-sm text-zinc-400">Poeng</label>
           <input
             type="number"
             min={1}
@@ -700,7 +992,7 @@ function AddQuestionPanel({
           disabled={busy}
           className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-2 text-sm font-medium"
         >
-          {busy ? "Adding…" : "Add question"}
+          {busy ? "Legger til…" : "Legg til spørsmål"}
         </button>
         {error && <p className="text-sm text-red-400">{error}</p>}
       </form>
@@ -736,42 +1028,73 @@ function ScoreboardPanel({
   }
 
   return (
-    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Scoreboard</h2>
+    <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4">
+      <div className="space-y-2">
+        <h2 className="font-semibold">Poengtavle</h2>
         <button
+          type="button"
           onClick={toggle}
           disabled={busy}
-          className={
-            "text-xs px-3 py-1 rounded-full border " +
-            (room.show_scoreboard
-              ? "bg-emerald-500/20 border-emerald-500 text-emerald-100"
-              : "bg-zinc-950 border-zinc-700 text-zinc-400")
-          }
-          title="Toggle whether players see the scoreboard"
+          aria-pressed={room.show_scoreboard}
+          className="w-full flex items-center justify-between gap-3 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 disabled:opacity-60 px-4 py-3 text-left"
         >
-          {room.show_scoreboard ? "Visible to players" : "Hidden from players"}
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">
+              Vis poengtavle til spillerne
+            </span>
+            <span className="text-xs text-zinc-500">
+              {room.show_scoreboard
+                ? "Spillerne ser stillingen nå"
+                : "Spillerne ser bare seg selv"}
+            </span>
+          </span>
+          <span
+            className={
+              "relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors " +
+              (room.show_scoreboard ? "bg-emerald-500" : "bg-zinc-700")
+            }
+          >
+            <span
+              className={
+                "absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform " +
+                (room.show_scoreboard ? "translate-x-5" : "translate-x-0.5")
+              }
+            />
+          </span>
         </button>
       </div>
       {players.length === 0 ? (
-        <p className="text-sm text-zinc-500">No players yet.</p>
+        <p className="text-sm text-zinc-500">Ingen spillere ennå.</p>
       ) : (
         <ol className="space-y-1">
           {sorted.map((p, i) => (
             <li
               key={p.id}
-              className="flex items-center justify-between text-sm bg-zinc-950 rounded px-3 py-2"
+              className="flex items-center justify-between text-sm bg-zinc-950 rounded px-3 py-2 gap-2"
             >
-              <span>
+              <span className="truncate">
                 <span className="text-zinc-500 mr-2">{i + 1}.</span>
                 {p.name}
               </span>
-              <span className="font-mono font-semibold">
-                {scores[p.id] ?? 0}
+              <span className="flex items-center gap-3 shrink-0">
+                {p.rejoin_code && (
+                  <span className="font-mono text-xs tracking-widest text-zinc-500">
+                    {p.rejoin_code}
+                  </span>
+                )}
+                <span className="font-mono font-semibold">
+                  {scores[p.id] ?? 0}
+                </span>
               </span>
             </li>
           ))}
         </ol>
+      )}
+      {players.length > 0 && (
+        <p className="text-xs text-zinc-500">
+          Koden ved siden av navnet er spillerens kode for å fortsette – del
+          den med dem hvis de mister tilgangen.
+        </p>
       )}
     </section>
   );

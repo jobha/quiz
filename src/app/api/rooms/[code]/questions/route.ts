@@ -11,7 +11,7 @@ export async function POST(
   const code = normalizeRoomCode(rawCode);
   const secret = req.headers.get("x-host-secret") ?? "";
   if (!(await verifyHost(code, secret))) {
-    return new NextResponse("Forbidden", { status: 403 });
+    return new NextResponse("Ikke tillatt", { status: 403 });
   }
 
   const body = (await req.json().catch(() => null)) as {
@@ -20,28 +20,39 @@ export async function POST(
     correct_answer?: string;
     choices?: string[] | null;
     points?: number;
+    image_url?: string | null;
   } | null;
 
   const type = body?.type;
   const prompt = body?.prompt?.trim();
   const correct = body?.correct_answer?.trim();
-  const points = Number.isFinite(body?.points) ? Math.max(1, Math.min(10, body!.points!)) : 1;
+  const points = Number.isFinite(body?.points)
+    ? Math.max(1, Math.min(20, body!.points!))
+    : 1;
+  const imageUrl =
+    typeof body?.image_url === "string" && body.image_url.trim()
+      ? body.image_url.trim()
+      : null;
 
   if (!type || (type !== "text" && type !== "choice")) {
-    return new NextResponse("Invalid type", { status: 400 });
+    return new NextResponse("Ugyldig type", { status: 400 });
   }
   if (!prompt || !correct) {
-    return new NextResponse("Missing prompt or correct_answer", { status: 400 });
+    return new NextResponse("Mangler spørsmål eller riktig svar", {
+      status: 400,
+    });
   }
 
   let choices: string[] | null = null;
   if (type === "choice") {
     choices = (body?.choices ?? []).map((s) => s.trim()).filter(Boolean);
     if (choices.length < 2) {
-      return new NextResponse("Need at least two choices", { status: 400 });
+      return new NextResponse("Trenger minst to alternativer", { status: 400 });
     }
     if (!choices.includes(correct)) {
-      return new NextResponse("Correct answer must be one of the choices", { status: 400 });
+      return new NextResponse("Riktig svar må være ett av alternativene", {
+        status: 400,
+      });
     }
   }
 
@@ -62,6 +73,7 @@ export async function POST(
       correct_answer: correct,
       choices,
       points,
+      image_url: imageUrl,
     })
     .select("id")
     .single();

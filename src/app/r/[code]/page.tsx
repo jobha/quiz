@@ -24,9 +24,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const [question, setQuestion] = useState<Question | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [myAnswers, setMyAnswers] = useState<Record<string, Answer>>({});
-  const [answeredQuestions, setAnsweredQuestions] = useState<Question[]>([]);
   const [allAnswers, setAllAnswers] = useState<Answer[]>([]);
-  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
 
   const storageKey = `quiz:player:${code}`;
 
@@ -99,25 +97,23 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [code]);
 
-  // For the player-facing scoreboard: load all answers + questions
-  // for this room and stay in sync. Cheap because the room is small.
+  // For the player-facing scoreboard: load all answers and stay in sync.
+  // Cheap because the room is small.
   useEffect(() => {
     if (!room?.show_scoreboard) {
       setAllAnswers([]);
-      setAllQuestions([]);
       return;
     }
     const sb = supabaseBrowser();
     let cancelled = false;
 
     async function load() {
-      const [{ data: ans }, { data: qs }] = await Promise.all([
-        sb.from("answers").select("*").eq("room_code", code),
-        sb.from("questions").select("*").eq("room_code", code),
-      ]);
+      const { data: ans } = await sb
+        .from("answers")
+        .select("*")
+        .eq("room_code", code);
       if (cancelled) return;
       if (ans) setAllAnswers(ans as Answer[]);
-      if (qs) setAllQuestions(qs as Question[]);
     }
     load();
 
@@ -139,27 +135,6 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
             if (payload.eventType === "DELETE") {
               const removed = payload.old as { id: string };
               return prev.filter((a) => a.id !== removed.id);
-            }
-            return prev;
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "questions", filter: `room_code=eq.${code}` },
-        (payload) => {
-          setAllQuestions((prev) => {
-            if (payload.eventType === "INSERT")
-              return [...prev, payload.new as Question];
-            if (payload.eventType === "UPDATE")
-              return prev.map((q) =>
-                q.id === (payload.new as Question).id
-                  ? (payload.new as Question)
-                  : q,
-              );
-            if (payload.eventType === "DELETE") {
-              const removed = payload.old as { id: string };
-              return prev.filter((q) => q.id !== removed.id);
             }
             return prev;
           });
@@ -235,26 +210,6 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [code, playerId]);
 
-  // Load all answered questions for scoreboard context.
-  useEffect(() => {
-    const ids = Object.keys(myAnswers);
-    if (ids.length === 0) {
-      setAnsweredQuestions([]);
-      return;
-    }
-    const sb = supabaseBrowser();
-    let cancelled = false;
-    sb.from("questions")
-      .select("*")
-      .in("id", ids)
-      .then(({ data }) => {
-        if (!cancelled && data) setAnsweredQuestions(data as Question[]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [Object.keys(myAnswers).join(",")]);
-
   async function joinRoom(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -273,7 +228,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       setPlayerId(json.player_id);
       router.replace(`/r/${code}?p=${json.player_id}`);
     } catch (e) {
-      setJoinError(e instanceof Error ? e.message : "Failed to join");
+      setJoinError(e instanceof Error ? e.message : "Klarte ikke å bli med");
     } finally {
       setJoining(false);
     }
@@ -287,31 +242,26 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
   const myScore = useMemo(() => {
     let s = 0;
     for (const a of Object.values(myAnswers)) {
-      if (a.is_correct) {
-        const q = answeredQuestions.find((q) => q.id === a.question_id);
-        s += q?.points ?? 1;
-      }
+      if (typeof a.points_awarded === "number") s += a.points_awarded;
     }
     return s;
-  }, [myAnswers, answeredQuestions]);
+  }, [myAnswers]);
 
   const allScores = useMemo(() => {
-    const byQ: Record<string, Question> = {};
-    for (const q of allQuestions) byQ[q.id] = q;
     const out: Record<string, number> = {};
     for (const p of players) out[p.id] = 0;
     for (const a of allAnswers) {
-      if (a.is_correct) {
-        out[a.player_id] = (out[a.player_id] ?? 0) + (byQ[a.question_id]?.points ?? 1);
+      if (typeof a.points_awarded === "number") {
+        out[a.player_id] = (out[a.player_id] ?? 0) + a.points_awarded;
       }
     }
     return out;
-  }, [allAnswers, allQuestions, players]);
+  }, [allAnswers, players]);
 
   if (!room) {
     return (
       <Centered>
-        <p className="text-zinc-400">Looking up room {code}…</p>
+        <p className="text-zinc-400">Leter etter rom {code}…</p>
       </Centered>
     );
   }
@@ -321,7 +271,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       <Centered>
         <div className="w-full max-w-md space-y-6">
           <header className="text-center">
-            <p className="text-zinc-400 text-sm">Joining room</p>
+            <p className="text-zinc-400 text-sm">Blir med i rom</p>
             <h1 className="text-3xl font-bold tracking-[0.3em] font-mono">
               {code}
             </h1>
@@ -330,11 +280,11 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
             onSubmit={joinRoom}
             className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-4"
           >
-            <label className="block text-sm text-zinc-400">Your name</label>
+            <label className="block text-sm text-zinc-400">Ditt navn</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Jonas"
+              placeholder="f.eks. Jonas"
               maxLength={40}
               className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500"
             />
@@ -343,7 +293,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
               disabled={joining || !name.trim()}
               className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium"
             >
-              {joining ? "Joining…" : "Join"}
+              {joining ? "Blir med…" : "Bli med"}
             </button>
             {joinError && (
               <p className="text-sm text-red-400">{joinError}</p>
@@ -359,12 +309,12 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       <header className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
-            Room {code}
+            Rom {code}
           </p>
           <p className="text-lg font-semibold">{me.name}</p>
           {me.rejoin_code && (
             <p className="text-xs text-zinc-500 mt-1">
-              Your rejoin code:{" "}
+              Din kode for å fortsette:{" "}
               <span className="font-mono tracking-widest text-zinc-300">
                 {me.rejoin_code}
               </span>
@@ -372,7 +322,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           )}
         </div>
         <div className="text-right">
-          <p className="text-xs text-zinc-500 uppercase tracking-widest">Score</p>
+          <p className="text-xs text-zinc-500 uppercase tracking-widest">Poeng</p>
           <p className="text-2xl font-bold">{myScore}</p>
         </div>
       </header>
@@ -394,23 +344,32 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
       ) : (
         <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
           <h2 className="text-sm font-semibold text-zinc-400 mb-3">
-            Players ({players.length})
+            Spillere ({players.length})
           </h2>
-          <ul className="grid grid-cols-2 gap-2">
+          <ul className="space-y-1">
             {players.map((p) => (
               <li
                 key={p.id}
                 className={
-                  "rounded-md px-3 py-2 text-sm " +
+                  "flex items-center justify-between rounded-md px-3 py-2 text-sm gap-2 " +
                   (p.id === playerId
                     ? "bg-indigo-500/20 text-indigo-200"
                     : "bg-zinc-950")
                 }
               >
-                {p.name}
+                <span className="truncate">{p.name}</span>
+                {p.rejoin_code && (
+                  <span className="font-mono text-xs tracking-widest text-zinc-500 shrink-0">
+                    {p.rejoin_code}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
+          <p className="text-xs text-zinc-500 mt-3">
+            Koden ved siden av navnet er spillerens kode for å fortsette –
+            del den hvis noen blir kastet ut.
+          </p>
         </section>
       )}
     </main>
@@ -431,23 +390,32 @@ function ScoreboardForPlayers({
   );
   return (
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-4">
-      <h2 className="text-sm font-semibold text-zinc-400 mb-3">Scoreboard</h2>
+      <h2 className="text-sm font-semibold text-zinc-400 mb-3">Poengtavle</h2>
       <ol className="space-y-1">
         {sorted.map((p, i) => (
           <li
             key={p.id}
             className={
-              "flex items-center justify-between text-sm rounded px-3 py-2 " +
+              "flex items-center justify-between text-sm rounded px-3 py-2 gap-2 " +
               (p.id === myId
                 ? "bg-indigo-500/20 text-indigo-100"
                 : "bg-zinc-950")
             }
           >
-            <span>
+            <span className="truncate">
               <span className="text-zinc-500 mr-2">{i + 1}.</span>
               {p.name}
             </span>
-            <span className="font-mono font-semibold">{scores[p.id] ?? 0}</span>
+            <span className="flex items-center gap-3 shrink-0">
+              {p.rejoin_code && (
+                <span className="font-mono text-xs tracking-widest text-zinc-500">
+                  {p.rejoin_code}
+                </span>
+              )}
+              <span className="font-mono font-semibold">
+                {scores[p.id] ?? 0}
+              </span>
+            </span>
           </li>
         ))}
       </ol>
@@ -471,22 +439,22 @@ function PlayerStage({
   if (room.phase === "lobby") {
     return (
       <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
-        <p className="text-zinc-400">Waiting for the host to start…</p>
+        <p className="text-zinc-400">Venter på at quizmasteren starter…</p>
       </div>
     );
   }
   if (room.phase === "ended") {
     return (
       <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
-        <p className="text-lg font-semibold">Quiz over!</p>
-        <p className="text-zinc-400 text-sm mt-1">Thanks for playing.</p>
+        <p className="text-lg font-semibold">Quizen er ferdig!</p>
+        <p className="text-zinc-400 text-sm mt-1">Takk for at du spilte.</p>
       </div>
     );
   }
   if (!question) {
     return (
       <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center">
-        <p className="text-zinc-400">Loading question…</p>
+        <p className="text-zinc-400">Laster spørsmål…</p>
       </div>
     );
   }
@@ -547,7 +515,7 @@ function QuestionView({
       });
       if (!res.ok) throw new Error(await res.text());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to submit");
+      setError(e instanceof Error ? e.message : "Klarte ikke å sende");
     } finally {
       setSubmitting(false);
     }
@@ -557,9 +525,16 @@ function QuestionView({
     <section className="rounded-2xl bg-zinc-900 border border-zinc-800 p-6 space-y-5">
       <div>
         <p className="text-xs uppercase tracking-widest text-zinc-500">
-          Question
+          Spørsmål
         </p>
         <h2 className="text-2xl font-semibold mt-1">{question.prompt}</h2>
+        {question.image_url && (
+          <img
+            src={question.image_url}
+            alt=""
+            className="mt-3 max-h-72 w-full object-contain rounded-lg bg-zinc-950 border border-zinc-800"
+          />
+        )}
       </div>
 
       {question.type === "choice" && question.choices ? (
@@ -602,7 +577,7 @@ function QuestionView({
             value={submitted ? myAnswer!.answer : text}
             onChange={(e) => setText(e.target.value)}
             disabled={locked || submitting}
-            placeholder="Type your answer"
+            placeholder="Skriv svaret ditt"
             className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-4 py-3 outline-none focus:border-indigo-500 disabled:opacity-70"
           />
           {!locked && (
@@ -611,7 +586,7 @@ function QuestionView({
               disabled={submitting || !text.trim()}
               className="w-full rounded-lg bg-indigo-500 hover:bg-indigo-400 disabled:opacity-60 px-4 py-3 font-medium"
             >
-              {submitting ? "Submitting…" : "Submit"}
+              {submitting ? "Sender…" : "Send"}
             </button>
           )}
         </form>
@@ -619,41 +594,56 @@ function QuestionView({
 
       {submitted && !revealed && (
         <p className="text-sm text-zinc-400">
-          Answer locked in. Waiting for the host to reveal…
+          Svaret er låst. Venter på at quizmasteren avslører…
         </p>
       )}
 
       {revealed && (
         <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-4 space-y-1">
           <p className="text-xs text-zinc-500 uppercase tracking-widest">
-            Correct answer
+            Riktig svar
           </p>
           <p className="font-medium">{question.correct_answer}</p>
           {myAnswer ? (
-            <p
-              className={
-                "text-sm mt-2 " +
-                (myAnswer.is_correct === true
-                  ? "text-emerald-400"
-                  : myAnswer.is_correct === false
-                  ? "text-red-400"
-                  : "text-zinc-400")
-              }
-            >
-              {myAnswer.is_correct === true
-                ? `Correct! +${question.points}`
-                : myAnswer.is_correct === false
-                ? "Not quite."
-                : "Awaiting host's judgement…"}
-            </p>
+            <ResultLine answer={myAnswer} maxPoints={question.points} />
           ) : (
-            <p className="text-sm text-zinc-500 mt-2">No answer submitted.</p>
+            <p className="text-sm text-zinc-500 mt-2">Ingen svar sendt.</p>
           )}
         </div>
       )}
 
       {error && <p className="text-sm text-red-400">{error}</p>}
     </section>
+  );
+}
+
+function ResultLine({
+  answer,
+  maxPoints,
+}: {
+  answer: Answer;
+  maxPoints: number;
+}) {
+  const pa = answer.points_awarded;
+  if (pa === null || pa === undefined) {
+    return (
+      <p className="text-sm mt-2 text-zinc-400">
+        Venter på dom fra quizmasteren…
+      </p>
+    );
+  }
+  if (pa === 0) {
+    return <p className="text-sm mt-2 text-red-400">Ikke helt.</p>;
+  }
+  if (pa === maxPoints) {
+    return (
+      <p className="text-sm mt-2 text-emerald-400">Riktig! +{pa}</p>
+    );
+  }
+  return (
+    <p className="text-sm mt-2 text-amber-300">
+      Delvis riktig! +{pa}
+    </p>
   );
 }
 

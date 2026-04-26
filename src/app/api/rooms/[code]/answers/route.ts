@@ -49,16 +49,24 @@ export async function POST(
 
   const { data: question } = await sb
     .from("questions")
-    .select("id, type, correct_answer, choices")
+    .select("id, type, correct_answer, choices, points")
     .eq("id", questionId)
     .maybeSingle();
-  if (!question) return new NextResponse("Question not found", { status: 404 });
-  const q = question as Pick<Question, "id" | "type" | "correct_answer" | "choices">;
+  if (!question) return new NextResponse("Fant ikke spørsmålet", { status: 404 });
+  const q = question as Pick<
+    Question,
+    "id" | "type" | "correct_answer" | "choices" | "points"
+  >;
 
-  // Multiple-choice is auto-graded against the correct answer.
-  // Free text is left unjudged — the host marks it during reveal.
-  const isCorrect: boolean | null =
-    q.type === "choice" ? answerText === q.correct_answer : null;
+  // Multiple-choice is auto-graded. Free text is left unjudged — the
+  // host marks it during reveal (or anytime).
+  let isCorrect: boolean | null = null;
+  let pointsAwarded: number | null = null;
+  if (q.type === "choice") {
+    const correct = answerText === q.correct_answer;
+    isCorrect = correct;
+    pointsAwarded = correct ? q.points : 0;
+  }
 
   const { error } = await sb
     .from("answers")
@@ -69,6 +77,7 @@ export async function POST(
         player_id: playerId,
         answer: answerText,
         is_correct: isCorrect,
+        points_awarded: pointsAwarded,
       },
       { onConflict: "question_id,player_id" },
     );
