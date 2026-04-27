@@ -61,6 +61,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     id: string;
     points: number;
     reason: string | null;
+    player_id: string;
   } | null>(null);
 
   // Hooks below this line must run on every render — keep them
@@ -321,19 +322,19 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     };
   }, [room?.current_question_id]);
 
-  // Pop a toast when this player gets a new bonus.
+  // Pop a toast for any bonus awarded in this room (self or others).
   useEffect(() => {
-    if (!playerId || previewMode) return;
+    if (previewMode) return;
     const sb = supabaseBrowser();
     const channel = sb
-      .channel(`bonus:${playerId}`)
+      .channel(`bonus-room:${code}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "bonus_points",
-          filter: `player_id=eq.${playerId}`,
+          filter: `room_code=eq.${code}`,
         },
         (payload) => {
           const row = payload.new as BonusPoints;
@@ -341,6 +342,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
             id: row.id,
             points: row.points,
             reason: row.reason,
+            player_id: row.player_id,
           });
         },
       )
@@ -348,7 +350,7 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
     return () => {
       sb.removeChannel(channel);
     };
-  }, [playerId, previewMode]);
+  }, [code, previewMode]);
 
   // Auto-dismiss the toast.
   useEffect(() => {
@@ -612,23 +614,71 @@ export default function PlayerPage({ params }: { params: Promise<Params> }) {
           players={players}
         />
       )}
-      {!previewMode && bonusToast && (
-        <div
-          key={bonusToast.id}
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-40 rounded-2xl accent-bg px-5 py-3 shadow-2xl text-center animate-[bonus-pop_400ms_cubic-bezier(0.2,0.7,0.2,1)] pointer-events-none"
-        >
-          <p className="text-xs uppercase tracking-widest opacity-80">
-            {bonusToast.points >= 0 ? "Bonus!" : "Straff"}
-          </p>
-          <p className="text-3xl font-bold">
-            {bonusToast.points >= 0 ? "+" : ""}
-            {bonusToast.points}
-          </p>
-          {bonusToast.reason && (
-            <p className="text-sm opacity-90 mt-1">{bonusToast.reason}</p>
-          )}
-        </div>
-      )}
+      {!previewMode && bonusToast && (() => {
+        const isSelf = bonusToast.player_id === playerId;
+        const recipient = players.find((p) => p.id === bonusToast.player_id);
+        const positive = bonusToast.points >= 0;
+        return (
+          <div
+            key={bonusToast.id}
+            className={
+              "fixed top-4 left-1/2 -translate-x-1/2 z-40 rounded-2xl px-5 py-3 shadow-2xl text-center animate-[bonus-pop_400ms_cubic-bezier(0.2,0.7,0.2,1)] pointer-events-none " +
+              (isSelf
+                ? "accent-bg"
+                : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800")
+            }
+          >
+            <p
+              className={
+                "text-xs uppercase tracking-widest " +
+                (isSelf ? "opacity-80" : "text-zinc-500")
+              }
+            >
+              {isSelf
+                ? positive
+                  ? "Bonus!"
+                  : "Straff"
+                : positive
+                ? "Bonus til"
+                : "Straff til"}
+            </p>
+            {!isSelf && recipient && (
+              <div className="flex items-center justify-center gap-2 mt-1">
+                <Avatar
+                  emoji={recipient.avatar_emoji}
+                  color={recipient.avatar_color}
+                  name={recipient.name}
+                  size="sm"
+                />
+                <span className="font-semibold">{recipient.name}</span>
+              </div>
+            )}
+            <p
+              className={
+                "text-3xl font-bold " +
+                (isSelf
+                  ? ""
+                  : positive
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-red-500 dark:text-red-400")
+              }
+            >
+              {positive ? "+" : ""}
+              {bonusToast.points}
+            </p>
+            {bonusToast.reason && (
+              <p
+                className={
+                  "text-sm mt-1 " +
+                  (isSelf ? "opacity-90" : "text-zinc-600 dark:text-zinc-400")
+                }
+              >
+                {bonusToast.reason}
+              </p>
+            )}
+          </div>
+        );
+      })()}
       {!previewMode && spotlightAnswer && spotlightPlayer && (
         <SpotlightOverlay
           answer={spotlightAnswer}
